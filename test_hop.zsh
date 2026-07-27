@@ -463,6 +463,26 @@ check "ctrl-s in descend mode (hop alias/) also toggles" \
         _hop_parse "$togrc" 2>/dev/null | grep -c "	$tmp/TogRoot/sub	"
       )"
 
+check "browse view stars an item as soon as it is favorited" \
+      "1" "$(
+        togrc="$tmp/togrc10"; : > "$togrc"
+        HOPRC="$togrc"; flag="$tmp/togflag10"; seen="$tmp/browseseen"; rm -f "$flag"
+        _hop_pick() {
+            if [[ -e "$flag" ]]; then cat > "$seen"; return 1
+            else cat > /dev/null; : > "$flag"; print -r -- "$tmp/TogRoot/sub"; return 2
+            fi
+        }
+        mkdir -p "$tmp/TogRoot/other"
+        cd "$tmp/TogRoot" && hop >/dev/null 2>&1
+        grep -c '★ sub/' "$seen"
+      )"
+
+check "unstarred siblings stay unstarred in the browse view" \
+      "0" "$(grep -c '★ other/' "$tmp/browseseen" 2>/dev/null)"
+
+check "unstarred sibling is still present in the browse view" \
+      "1" "$(grep -c '  other/' "$tmp/browseseen" 2>/dev/null)"
+
 check "-f shows only bookmarks, no indexed children" \
       "0" "$(
         togrc="$tmp/togrc6"; printf 'root\t%s\tdepth=2\n' "$tmp/TogRoot" > "$togrc"

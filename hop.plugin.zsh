@@ -394,7 +394,7 @@ _hop_pick() {
 
         case "$key" in
             right|tab)
-                kids="$(_hop_children "$sel")"
+                kids="$(_hop_children "$sel" | _hop_mark_favs)"
                 if [[ -n "$kids" ]]; then
                     stack_lines+=("$lines")
                     stack_prompt+=("$prompt")
@@ -424,6 +424,26 @@ _hop_pick() {
 }
 
 # ---------------------------------------------------------------------------
+# _hop_mark_favs — star bookmarked paths in `path \t display [\t kind]` lines
+#
+# The children listing knows nothing about favorites, so without this the
+# browse view gives no feedback when Ctrl-S stars an item — the change only
+# became visible on the next full `hop` run.
+# ---------------------------------------------------------------------------
+_hop_mark_favs() {
+    emulate -L zsh
+    local favs
+    # Tab-joined: tabs cannot occur in our paths (they are the field
+    # separator everywhere). An NR==FNR two-file join is NOT safe here —
+    # with an empty favorites list it swallows the entire data stream.
+    favs="$(_hop_parse 2>/dev/null | cut -f2 | tr '\n' '\t')"
+    awk -F'\t' -v OFS='\t' -v favlist="$favs" '
+        BEGIN { n = split(favlist, a, "\t"); for (i = 1; i <= n; i++) fav[a[i]] = 1 }
+        { $2 = (fav[$1] ? "★ " : "  ") $2; print }
+    '
+}
+
+# ---------------------------------------------------------------------------
 # _hop_browse — descend-mode picker loop rooted at $1; prints the chosen path
 #
 # Same exit-2 toggle protocol as the search branch: Ctrl-S toggles the
@@ -433,7 +453,7 @@ _hop_browse() {
     emulate -L zsh
     local base="$1" kids sel rc_pick
     while true; do
-        kids="$(_hop_children "$base")"
+        kids="$(_hop_children "$base" | _hop_mark_favs)"
         if [[ -z "$kids" ]]; then
             print -u2 "hop: ${base:t} has no subdirectories"
             return 1
