@@ -187,6 +187,39 @@ _hop_rank() {
 }
 
 # ---------------------------------------------------------------------------
+# _hop_alias_for — path + existing aliases -> a unique alias
+#
+#   _hop_alias_for /a/b/Daily\ Notes code notes   ->  daily-notes
+# ---------------------------------------------------------------------------
+_hop_alias_for() {
+    emulate -L zsh
+    # ## ("one or more") needs extended_glob; without it the pattern is a
+    # literal # and the collapse silently does nothing (DESIGN.md trap 2).
+    setopt local_options extended_glob
+
+    # `p`, never `local path` — lowercase path is zsh's tied PATH array, and
+    # shadowing it breaks external-command lookup for the function's scope.
+    local p="$1"; shift
+    local -a taken=("$@")
+    local base="${p:t}" cand n
+
+    base="${(L)base}"                       # lowercase
+    base="${base//[^a-z0-9]##/-}"           # runs of non-alphanumerics -> one -
+    base="${base##-}"                       # strip leading
+    base="${base%%-}"                       # strip trailing
+    [[ -n "$base" ]] || base="dir"
+
+    cand="$base"
+    n=2
+    while (( ${taken[(Ie)$cand]} )); do
+        cand="$base-$n"
+        (( n++ ))
+    done
+
+    print -r -- "$cand"
+}
+
+# ---------------------------------------------------------------------------
 # _hop_split_expect — parse `fzf --expect` output into `key \t path`
 #
 # fzf emits the pressed key on line 1 (EMPTY for plain Enter) and the selected

@@ -312,6 +312,37 @@ check "record count is preserved" \
 check "fields are not mangled" \
       "dir	/a/fav	fav	1	0" "$(print -r -- "$rin" | _hop_rank | head -1)"
 
+# --- _hop_alias_for -------------------------------------------------------
+print ""
+print "_hop_alias_for"
+
+check "lowercases the basename" \
+      "assets" "$(_hop_alias_for /a/b/Assets)"
+
+check "collapses spaces to a single hyphen" \
+      "daily-notes" "$(_hop_alias_for '/a/b/Daily  Notes')"
+
+check "collapses dots (file extensions) to hyphens" \
+      "goals-md" "$(_hop_alias_for /a/b/goals.md)"
+
+check "strips leading and trailing separators" \
+      "inbox" "$(_hop_alias_for '/a/b/_Inbox_')"
+
+check "leaves underscores-only names usable" \
+      "b-ai-and-ml" "$(_hop_alias_for /a/b/B_AI_and_ML)"
+
+check "no collision means no suffix" \
+      "assets" "$(_hop_alias_for /a/b/Assets code notes)"
+
+check "collision gets -2" \
+      "assets-2" "$(_hop_alias_for /a/b/Assets assets notes)"
+
+check "double collision gets -3" \
+      "assets-3" "$(_hop_alias_for /a/b/Assets assets assets-2)"
+
+check "purely non-alphanumeric name falls back to 'dir'" \
+      "dir" "$(_hop_alias_for '/a/b/---')"
+
 print ""
 print "$pass passed, $fail failed"
 (( fail == 0 ))
