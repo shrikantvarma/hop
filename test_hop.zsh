@@ -222,6 +222,73 @@ check "[missing] marker in display does not leak into the path" \
       $'\t/Users/x/gone' \
       "$(_hop_split_expect $'\n/Users/x/gone\tgone    /Users/x/gone  [missing]')"
 
+# --- _hop_index -----------------------------------------------------------
+print ""
+print "_hop_index"
+
+ix="$tmp/ix"
+mkdir -p "$ix/root/sub/deep" "$ix/root/.git" "$ix/flat"
+touch "$ix/root/top.md" "$ix/root/sub/mid.md" "$ix/root/sub/deep/low.md" "$ix/root/.git/config"
+
+irecs() { printf '%s\n' "$@"; }
+
+# depth=0 -> only the bookmark itself
+i0="$(irecs "r	$ix/root	ok	0" | _hop_index)"
+check "depth=0 yields exactly one record" \
+      "1" "$(print -r -- "$i0" | grep -c .)"
+check "depth=0 record is the bookmark, favorited, depth 0" \
+      "dir	$ix/root	r	1	0" "$i0"
+
+# depth=1 -> bookmark + immediate children
+i1="$(irecs "r	$ix/root	ok	1" | _hop_index)"
+check "depth=1 includes immediate subdir" \
+      "1" "$(print -r -- "$i1" | grep -c '	r/sub	')"
+check "depth=1 includes immediate file" \
+      "1" "$(print -r -- "$i1" | grep -c '	r/top.md	')"
+check "depth=1 excludes grandchildren" \
+      "0" "$(print -r -- "$i1" | grep -c 'r/sub/mid.md')"
+
+# depth=2 -> two levels
+i2="$(irecs "r	$ix/root	ok	2" | _hop_index)"
+check "depth=2 includes grandchildren" \
+      "1" "$(print -r -- "$i2" | grep -c '	r/sub/mid.md	')"
+check "depth=2 excludes great-grandchildren" \
+      "0" "$(print -r -- "$i2" | grep -c 'r/sub/deep/low.md')"
+
+check "indexed items are not favorited" \
+      "0" "$(print -r -- "$i2" | awk -F'\t' '$3=="r/sub"{print $4}')"
+
+check "bookmark itself is favorited" \
+      "1" "$(print -r -- "$i2" | awk -F'\t' '$3=="r"{print $4}')"
+
+check "depth field counts levels below the bookmark" \
+      "2" "$(print -r -- "$i2" | awk -F'\t' '$3=="r/sub/mid.md"{print $5}')"
+
+check "skip list is honoured" \
+      "0" "$(print -r -- "$i2" | grep -c '\.git')"
+
+# Order-independent: emission order between the dir and file find passes is
+# incidental — _hop_rank owns ordering.
+check "files are tagged file" \
+      "file" "$(print -r -- "$i2" | awk -F'\t' '$3=="r/top.md"{print $1}')"
+check "dirs are tagged dir" \
+      "dir" "$(print -r -- "$i2" | awk -F'\t' '$3=="r/sub"{print $1}')"
+
+# missing bookmarks contribute nothing
+im="$(irecs "gone	$ix/nowhere	missing	2" | _hop_index)"
+check "missing bookmark yields no records" \
+      "" "$im"
+
+# multiple bookmarks
+imulti="$(irecs "r	$ix/root	ok	0" "f	$ix/flat	ok	0" | _hop_index)"
+check "handles multiple bookmarks" \
+      "2" "$(print -r -- "$imulti" | grep -c .)"
+
+# A favorited file is indexed as itself and walked no further.
+ifile="$(irecs "n	$ix/root/top.md	ok	2" | _hop_index)"
+check "a file bookmark yields one record tagged file" \
+      "file	$ix/root/top.md	n	1	0" "$ifile"
+
 print ""
 print "$pass passed, $fail failed"
 (( fail == 0 ))

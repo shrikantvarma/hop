@@ -121,6 +121,59 @@ _hop_children() {
 }
 
 # ---------------------------------------------------------------------------
+# _hop_index — bookmark records on stdin -> full candidate list on stdout
+#
+#   in : alias \t path \t status \t depth
+#   out: kind \t path \t display \t fav \t depth
+#
+# Two `find` passes per bookmark (dirs, then files) rather than one. BSD find
+# has no -printf, so there is no portable way to tag type inline; running twice
+# with -type is the portable equivalent and still costs only milliseconds.
+# ---------------------------------------------------------------------------
+_hop_index() {
+    emulate -L zsh
+
+    local alias p st depth s
+    local -a prune
+
+    # Build the -prune expression once: \( -name .git -o -name ... \)
+    prune=('(')
+    for s in $_HOP_SKIP; do
+        prune+=(-name "$s" -o)
+    done
+    prune[-1]=')'          # replace the trailing -o
+
+    while IFS=$'\t' read -r alias p st depth; do
+        [[ "$st" == "ok" ]] || continue
+
+        # The bookmark itself is always present and always a favorite. It may
+        # be a file — a starred file is a legal bookmark.
+        if [[ -d "$p" ]]; then
+            printf '%s\t%s\t%s\t%s\t%s\n' "dir" "$p" "$alias" "1" "0"
+        else
+            printf '%s\t%s\t%s\t%s\t%s\n' "file" "$p" "$alias" "1" "0"
+            continue        # nothing to walk beneath a file
+        fi
+
+        (( depth > 0 )) || continue
+
+        # NB: no sed here — BSD sed does not interpret \t in replacements
+        # (GNU does), so tagging the streams with sed silently corrupts the
+        # records on macOS. awk's -v is portable.
+        for s in dir file; do
+            find -L "$p" -mindepth 1 -maxdepth "$depth" "${prune[@]}" -prune -o -type "${s[1]}" -print 2>/dev/null \
+                | awk -v kind="$s" -v root="$p" -v al="$alias" 'BEGIN{OFS="\t"}
+                    {
+                        rel = substr($0, length(root) + 2)
+                        if (rel == "") next
+                        n = split(rel, parts, "/")
+                        print kind, $0, al "/" rel, 0, n
+                    }'
+        done
+    done
+}
+
+# ---------------------------------------------------------------------------
 # _hop_split_expect — parse `fzf --expect` output into `key \t path`
 #
 # fzf emits the pressed key on line 1 (EMPTY for plain Enter) and the selected
