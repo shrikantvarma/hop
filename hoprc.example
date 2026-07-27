@@ -1,0 +1,17 @@
+# ~/.hoprc — bookmarks for `hop`
+#
+#   alias<whitespace>path
+#
+# A leading ~ expands to $HOME. Paths may contain spaces. `#` starts a comment.
+# Bookmarks whose path is gone are shown as [missing] rather than dropped.
+#
+# Bookmark trunks, not leaves — you can descend into any of these with → or Tab.
+
+code        ~/Code
+dotfiles    ~/.config
+
+notes       ~/Documents/Notes
+daily       ~/Documents/Daily Notes
+
+# Cloud-synced directories work even when reached through symlinks:
+# vault     ~/Library/Mobile Documents/iCloud~md~obsidian/Documents/Vault
