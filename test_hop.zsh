@@ -395,6 +395,29 @@ check "removing an absent path is a no-op" \
 check "add to an unwritable file returns non-zero" \
       "1" "$(chmod a-w "$frc"; _hop_fav_add "$tmp/Other2" "$frc" >/dev/null 2>&1; print $?; chmod u+w "$frc")"
 
+# --- _hop_format ----------------------------------------------------------
+print ""
+print "_hop_format"
+
+frecs="dir	/a/fav	fav	1	0
+file	/a/b/note.md	b/note.md	0	2"
+
+check "favorites are starred" \
+      "1" "$(print -r -- "$frecs" | _hop_format | grep -c '★ fav')"
+
+check "non-favorites are not starred" \
+      "0" "$(print -r -- "$frecs" | _hop_format | grep -c '★ b/note.md')"
+
+check "path stays in field 1" \
+      "/a/b/note.md" "$(print -r -- "$frecs" | _hop_format | awk -F'\t' 'NR==2{print $1}')"
+
+check "output is exactly two fields" \
+      "2" "$(print -r -- "$frecs" | _hop_format | head -1 | awk -F'\t' '{print NF}')"
+
+check "ctrl-s is parsed by _hop_split_expect" \
+      $'ctrl-s\t/Users/x/Code' \
+      "$(_hop_split_expect $'ctrl-s\n/Users/x/Code\t★ code')"
+
 print ""
 print "$pass passed, $fail failed"
 (( fail == 0 ))

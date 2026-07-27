@@ -306,13 +306,16 @@ _hop_split_expect() {
 }
 
 # ---------------------------------------------------------------------------
-# _hop_format — 3-field records -> `path \t display` picker lines
+# _hop_format — index records -> `path \t display` picker lines
+#
+#   in : kind \t path \t display \t fav \t depth
+#   out: path \t display
+#
+# Favorites get a star; everything else gets two spaces so the columns align.
 # ---------------------------------------------------------------------------
 _hop_format() {
-    awk -F'\t' '{
-        mark = ($3 == "missing") ? "  [missing]" : ""
-        printf "%s\t%-22s %s%s\n", $2, $1, $2, mark
-    }'
+    awk -F'\t' 'BEGIN{OFS="\t"}
+        { print $2, ($4 == "1" ? "★ " : "  ") $3 }'
 }
 
 # ---------------------------------------------------------------------------
@@ -352,10 +355,10 @@ _hop_pick() {
               --reverse \
               --border \
               --prompt="$prompt" \
-              --expect=right,left,tab,btab \
+              --expect=right,left,tab,btab,ctrl-s \
               --preview='ls -1p {1} 2>/dev/null | head -40' \
               --preview-window='right:45%:wrap' \
-              --header='Enter hop   →/Tab descend   ←/S-Tab up   (^F ^B move cursor)' \
+              --header='Enter hop   →/Tab descend   ←/S-Tab up   ^S favorite' \
               ${=HOP_FZF_OPTS})" || return 1
 
         out="$(_hop_split_expect "$out")"
@@ -380,6 +383,11 @@ _hop_pick() {
                     shift -p stack_lines
                     shift -p stack_prompt
                 fi
+                ;;
+            ctrl-s)
+                # Signal upward; hop() owns config mutation.
+                print -r -- "$sel"
+                return 2
                 ;;
             *)                         # Enter
                 print -r -- "$sel"
