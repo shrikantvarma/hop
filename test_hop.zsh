@@ -80,6 +80,59 @@ check "malformed line reported with line number" \
 check "unreadable rc returns non-zero" \
       "1" "$(_hop_parse "$tmp/nope" >/dev/null 2>&1; print $?)"
 
+# --- depth column ---------------------------------------------------------
+print ""
+print "_hop_parse depth"
+
+dtmp="$tmp/depth"; mkdir -p "$dtmp/plain" "$dtmp/Chapter 3"
+drc="$tmp/depthrc"
+cat > "$drc" <<EOF
+nodepth      $dtmp/plain
+zero         $dtmp/plain    depth=0
+three        $dtmp/plain    depth=3
+spaced       $dtmp/Chapter 3
+bad          $dtmp/plain    depth=abc
+EOF
+dout="$(_hop_parse "$drc" 2>"$tmp/derr")"
+dfield() { print -r -- "$dout" | awk -F'\t' -v a="$1" -v n="$2" '$1==a {print $n; exit}'; }
+
+check "depth defaults to 2 when absent" \
+      "2" "$(dfield nodepth 4)"
+
+check "depth=0 parsed" \
+      "0" "$(dfield zero 4)"
+
+check "depth=3 parsed" \
+      "3" "$(dfield three 4)"
+
+check "depth token stripped from path" \
+      "$dtmp/plain" "$(dfield three 2)"
+
+check "path ending in a number is NOT read as depth" \
+      "$dtmp/Chapter 3" "$(dfield spaced 2)"
+
+check "path ending in a number keeps default depth" \
+      "2" "$(dfield spaced 4)"
+
+check "non-numeric depth falls back to 2" \
+      "2" "$(dfield bad 4)"
+
+check "non-numeric depth warns with line number" \
+      "1" "$(print -r -- "$(<$tmp/derr)" | grep -c 'depthrc:5')"
+
+# A favorited FILE is a valid bookmark — Ctrl-S can star a file, and Enter
+# then lands in its parent. Status must not be "missing" just because the
+# path is not a directory.
+touch "$dtmp/note.md"
+frc0="$tmp/filerc"
+print -r -- "note	$dtmp/note.md" > "$frc0"
+check "a file bookmark is status ok, not missing" \
+      "ok" "$(_hop_parse "$frc0" | cut -f3)"
+
+print -r -- "ghost	$dtmp/nope.md" > "$frc0"
+check "a nonexistent file bookmark is still missing" \
+      "missing" "$(_hop_parse "$frc0" | cut -f3)"
+
 rmdir "$HOME/.hop_test_home_dir"
 
 # --- _hop_children -------------------------------------------------------

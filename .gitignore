@@ -5,3 +5,6 @@
 
 # git worktrees
 .worktrees/
+
+# SDD scratch workspace
+.superpowers/

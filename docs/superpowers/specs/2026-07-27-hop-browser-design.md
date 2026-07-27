@@ -46,20 +46,26 @@ express that.
 
 ### Config format
 
-`~/.hoprc` gains an optional third column: the depth to index beneath that bookmark.
+`~/.hoprc` gains an optional trailing `depth=N` token: how deep to index beneath that
+bookmark.
 
 ```
-# alias      path                                       depth
-code         ~/Code                                     0
-claude       ~/.claude                                  0
-context      ~/Digital_Brain/Obsidian/context           3
-db           ~/Digital_Brain/Obsidian/DB                2
-daily        ~/Digital_Brain/Obsidian/Daily Notes       1
+# alias      path                                       index depth
+code         ~/Code                                     depth=0
+claude       ~/.claude                                  depth=0
+context      ~/Digital_Brain/Obsidian/context           depth=3
+db           ~/Digital_Brain/Obsidian/DB                depth=2
+daily        ~/Digital_Brain/Obsidian/Daily Notes       depth=1
 ```
 
-- `0` — jump target only; never appears in the index beyond itself.
+- `depth=0` — jump target only; never appears in the index beyond itself.
 - Omitted — defaults to `2`.
-- Existing two-column files remain valid, so v0.1 configs keep working.
+- Existing files remain valid, so v0.1 configs keep working.
+
+**Why `depth=N` and not a bare third column.** Paths may contain spaces, so a bare
+trailing number is ambiguous: `~/Notes/Chapter 3` would parse as the path
+`~/Notes/Chapter` with depth 3. A keyed token removes the ambiguity entirely and is
+self-documenting in the file. The cost is four extra characters per line.
 
 **Every `.hoprc` entry is a favorite** and renders with a `★`. There is no separate
 favorites file and no second concept to learn: the bookmark list *is* the favorites

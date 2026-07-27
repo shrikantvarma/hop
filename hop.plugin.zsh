@@ -34,7 +34,7 @@ _hop_parse() {
     emulate -L zsh
 
     local rc="${1:-$HOPRC}"
-    local line name path lineno=0
+    local line name path depth lineno=0
 
     [[ -r "$rc" ]] || { print -u2 "hop: cannot read $rc"; return 1 }
 
@@ -44,15 +44,25 @@ _hop_parse() {
         line="${line%%'#'*}"                          # strip comments
         [[ "$line" == *[^[:space:]]* ]] || continue   # blank / whitespace only
 
-        # Split on the first whitespace run. The trailing [^[:space:]] anchors
-        # the greedy .* so trailing whitespace is excluded, while spaces INSIDE
-        # the path are preserved.
-        if [[ ! "$line" =~ '^[[:space:]]*([^[:space:]]+)[[:space:]]+(.*[^[:space:]])[[:space:]]*$' ]]; then
+        # Try the depth= form first. A keyed token is used rather than a bare
+        # trailing number because paths may contain spaces: "~/Notes/Chapter 3"
+        # would otherwise parse as path "~/Notes/Chapter" with depth 3.
+        if [[ "$line" =~ '^[[:space:]]*([^[:space:]]+)[[:space:]]+(.*[^[:space:]])[[:space:]]+depth=([^[:space:]]+)[[:space:]]*$' ]]; then
+            name="$match[1]"
+            path="$match[2]"
+            depth="$match[3]"
+            if [[ ! "$depth" =~ '^[0-9]+$' ]]; then
+                print -u2 "hop: $rc:$lineno: depth=$depth is not a number -- using 2"
+                depth=2
+            fi
+        elif [[ "$line" =~ '^[[:space:]]*([^[:space:]]+)[[:space:]]+(.*[^[:space:]])[[:space:]]*$' ]]; then
+            name="$match[1]"
+            path="$match[2]"
+            depth=2
+        else
             print -u2 "hop: $rc:$lineno: malformed (no path) -- skipped"
             continue
         fi
-        name="$match[1]"
-        path="$match[2]"
 
         # Expand a leading ~ ONLY, anchored to position 0. A global substitution
         # would corrupt paths that legitimately contain ~, such as macOS iCloud
@@ -65,10 +75,13 @@ _hop_parse() {
 
         # printf, not `print -r`: -r suppresses escape interpretation, which
         # would emit a literal backslash-t instead of a tab separator.
-        if [[ -d "$path" ]]; then
-            printf '%s\t%s\t%s\n' "$name" "$path" "ok"
+        # -e, not -d: a bookmark may be a FILE. Ctrl-S can star a file, and
+        # Enter on it lands in its parent directory. Testing -d here would
+        # mark every favorited file "missing" and drop it from the index.
+        if [[ -e "$path" ]]; then
+            printf '%s\t%s\t%s\t%s\n' "$name" "$path" "ok" "$depth"
         else
-            printf '%s\t%s\t%s\n' "$name" "$path" "missing"
+            printf '%s\t%s\t%s\t%s\n' "$name" "$path" "missing" "$depth"
         fi
     done < "$rc"
 }
