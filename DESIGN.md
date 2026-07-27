@@ -32,7 +32,7 @@ loop control.
 interface is what lets the same picker serve both the bookmark list and a
 `_hop_children` listing during descent.
 
-## Three traps worth knowing
+## Five traps worth knowing
 
 These each produced a real bug during development.
 
@@ -62,6 +62,20 @@ read as a filesystem problem rather than a bug.
 `_hop_children` uses `(-/N)`: `-` resolves symlinks before the type test, `/`
 keeps directories, `N` yields nothing rather than erroring on no match. A
 `find`-based reimplementation needs `-L`.
+
+### 4. BSD sed does not interpret `\t` in replacements
+
+GNU sed does, so `sed 's/^/dir\t/'` works on Linux and silently emits a
+literal `t` on macOS — the records look plausible but field splitting breaks.
+`_hop_index` tags its streams with `awk -v` instead.
+
+### 5. `local path` shadows zsh's tied PATH array
+
+Lowercase `path` is tied to `$PATH` in zsh. Declaring `local path` and
+assigning a directory to it replaces the function's command-search path, so
+the next external command fails with "command not found" — but only in
+functions that call external commands after the assignment, which is why it
+can lurk unnoticed. This codebase uses `p` for path-valued locals.
 
 ## Tilde expansion is anchored
 
@@ -105,9 +119,10 @@ user edits `.hoprc` and then wonders why the entry never appears.
 
 ## Testing
 
-`zsh test_hop.zsh` — 27 assertions over the four pure units, including
-descent through a symlinked parent, paths containing spaces, paths containing
-literal `~` characters, and every `--expect` key.
+`zsh test_hop.zsh` — 90 assertions over the pure units, including descent
+through a symlinked parent, per-bookmark index depth, favorite round-trips that
+must restore the config byte-for-byte, paths containing spaces, paths
+containing literal `~` characters, and every `--expect` key.
 
 The fzf loop is hand-verified. Driving it under a pty was attempted and
 abandoned: fzf reads keys from `/dev/tty` while its list arrives on stdin, and
@@ -115,6 +130,6 @@ the two cannot be fed reliably from a non-interactive harness.
 
 ## Deliberately out of scope
 
-Editor/file-manager open modes, auto-discovery of bookmarks, frecency ranking,
-and populating `.hoprc` by scanning the disk. The bookmark list is curated by
-hand, on purpose; the action is `cd` only.
+Opening files, frecency/usage tracking, content search (grep inside files),
+caching, and multi-select. Bookmarks are curated (by hand or via Ctrl-S), never
+auto-discovered; the action is `cd` only.

@@ -1,6 +1,6 @@
 # hop
 
-**Curated directory bookmarks you can walk into.**
+**Bookmark a few directories. Search everything inside them.**
 
 Bookmark the directories you care about, fuzzy-find them, then press `→` to step
 *into* one and keep going. Bookmark the trunk, browse the branches.
@@ -90,9 +90,9 @@ silently dropped, so a typo is visible instead of mysterious.
 ## Usage
 
 ```sh
-hop                # pick from all bookmarks
+hop                # search everything in your bookmarked trees
+hop goals          # jump to the best match for "goals"
 hop notes          # exact alias -> jump immediately, no picker
-hop proj           # not an alias -> picker, pre-filtered by "proj"
 hop notes/         # open the picker INSIDE ~/Documents/Notes
 hop -l             # list bookmarks
 hop -e             # edit ~/.hoprc
@@ -109,16 +109,37 @@ the full path, so typing a real directory name finds it.
 | `Enter` | cd to the highlighted directory |
 | `→` or `Tab` | descend into it |
 | `←` or `Shift-Tab` | back out one level |
+| `Ctrl-S` | favorite / unfavorite the highlighted item |
 | `Ctrl-F` / `Ctrl-B` | move the cursor within the query |
 | `Esc` | cancel, shell stays put |
 
 `cd` happens only on `Enter` — wandering the tree never moves your shell.
+`Enter` on a **file** lands in the file's directory; hop never opens files.
 
 ### Why `hop <alias>/`
 
 An exact alias jumps instantly, which leaves no picker to descend from. The
 trailing slash says "open the picker here instead": `hop notes/` lands you in
 the list of `~/Documents/Notes`'s subdirectories.
+
+### Search depth
+
+Bookmarks are searched two levels deep by default. Change it per bookmark:
+
+```sh
+code      ~/Code       depth=0    # jump target only, never searched
+notes     ~/Notes      depth=3    # searched deeply
+```
+
+`depth=0` is for large trees you only ever `cd` into — without it, thousands of
+`node_modules` and plugin files crowd out the handful of notes you actually
+search for.
+
+### Favorites
+
+Everything in `~/.hoprc` is a favorite: it shows `★` and ranks above every
+indexed result. Press `Ctrl-S` in the picker to add or remove one. `hop` writes
+the change to `~/.hoprc` and leaves your comments and formatting alone.
 
 ## Configuration
 
@@ -166,8 +187,9 @@ survive intact.
 zsh test_hop.zsh
 ```
 
-27 assertions covering config parsing, subdirectory listing (including through
-symlinks), and key handling. The fzf picker itself is interactive and is
+90 assertions covering config parsing, indexing, ranking, alias derivation,
+config rewriting (byte-for-byte round-trip), and key handling — including
+listing through symlinks. The fzf picker itself is interactive and is
 verified by hand.
 
 ## License

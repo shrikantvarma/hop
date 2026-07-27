@@ -1,17 +1,21 @@
 # ~/.hoprc — bookmarks for `hop`
 #
-#   alias<whitespace>path
+#   alias<whitespace>path<whitespace>[depth=N]
 #
 # A leading ~ expands to $HOME. Paths may contain spaces. `#` starts a comment.
+# Every entry here is a favorite: it shows ★ and ranks above everything else.
 # Bookmarks whose path is gone are shown as [missing] rather than dropped.
 #
-# Bookmark trunks, not leaves — you can descend into any of these with → or Tab.
+# depth=N controls how far below a bookmark to index for search.
+#   depth=0  jump target only — nothing beneath it appears in search
+#   omitted  defaults to 2
+# Use depth=0 for big noisy trees you only ever cd into.
 
-code        ~/Code
-dotfiles    ~/.config
+code        ~/Code                        depth=0
+dotfiles    ~/.config                     depth=0
 
-notes       ~/Documents/Notes
-daily       ~/Documents/Daily Notes
+notes       ~/Documents/Notes             depth=3
+daily       ~/Documents/Daily Notes      depth=1
 
 # Cloud-synced directories work even when reached through symlinks:
 # vault     ~/Library/Mobile Documents/iCloud~md~obsidian/Documents/Vault
