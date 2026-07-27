@@ -2,3 +2,6 @@
 *.swp
 *.tmp
 .hoprc
+
+# git worktrees
+.worktrees/
