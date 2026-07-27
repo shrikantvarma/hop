@@ -97,7 +97,11 @@ Emission order, since fzf preserves input order for equal match scores:
 
 1. Favorites (`fav=1`) first
 2. Then ascending `depth` — shallower before deeper
-3. Then alphabetical by path
+3. Then alphabetical by display (the alias-prefixed form, e.g. `notes/goals.md`) —
+   this groups equal-depth results by bookmark, which scans better than raw-path
+   order. (Amended 2026-07-27 during final review: the original text said "by
+   path"; the implemented display-sort was judged the better behavior and the
+   spec updated to match.)
 
 So `context/goals.md` (favorited or depth 1) outranks
 `Code/nutrition/src/lib/goals.py` (depth 3) for the query `goals`.

@@ -119,7 +119,7 @@ user edits `.hoprc` and then wonders why the entry never appears.
 
 ## Testing
 
-`zsh test_hop.zsh` — 90 assertions over the pure units, including descent
+`zsh test_hop.zsh` — 101 assertions over the pure units, including descent
 through a symlinked parent, per-bookmark index depth, favorite round-trips that
 must restore the config byte-for-byte, paths containing spaces, paths
 containing literal `~` characters, and every `--expect` key.

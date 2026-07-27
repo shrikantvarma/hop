@@ -34,7 +34,7 @@ _hop_parse() {
     emulate -L zsh
 
     local rc="${1:-$HOPRC}"
-    local line name path depth lineno=0
+    local line name p depth lineno=0   # `p`, not `path` (tied PATH array)
 
     [[ -r "$rc" ]] || { print -u2 "hop: cannot read $rc"; return 1 }
 
@@ -49,7 +49,7 @@ _hop_parse() {
         # would otherwise parse as path "~/Notes/Chapter" with depth 3.
         if [[ "$line" =~ '^[[:space:]]*([^[:space:]]+)[[:space:]]+(.*[^[:space:]])[[:space:]]+depth=([^[:space:]]+)[[:space:]]*$' ]]; then
             name="$match[1]"
-            path="$match[2]"
+            p="$match[2]"
             depth="$match[3]"
             if [[ ! "$depth" =~ '^[0-9]+$' ]]; then
                 print -u2 "hop: $rc:$lineno: depth=$depth is not a number -- using 2"
@@ -57,7 +57,7 @@ _hop_parse() {
             fi
         elif [[ "$line" =~ '^[[:space:]]*([^[:space:]]+)[[:space:]]+(.*[^[:space:]])[[:space:]]*$' ]]; then
             name="$match[1]"
-            path="$match[2]"
+            p="$match[2]"
             depth=2
         else
             print -u2 "hop: $rc:$lineno: malformed (no path) -- skipped"
@@ -67,10 +67,10 @@ _hop_parse() {
         # Expand a leading ~ ONLY, anchored to position 0. A global substitution
         # would corrupt paths that legitimately contain ~, such as macOS iCloud
         # container names like `iCloud~md~obsidian`.
-        if [[ "$path" == "~" ]]; then
-            path="$HOME"
-        elif [[ "$path" == "~/"* ]]; then
-            path="$HOME/${path#\~/}"
+        if [[ "$p" == "~" ]]; then
+            p="$HOME"
+        elif [[ "$p" == "~/"* ]]; then
+            p="$HOME/${p#\~/}"
         fi
 
         # printf, not `print -r`: -r suppresses escape interpretation, which
@@ -78,10 +78,10 @@ _hop_parse() {
         # -e, not -d: a bookmark may be a FILE. Ctrl-S can star a file, and
         # Enter on it lands in its parent directory. Testing -d here would
         # mark every favorited file "missing" and drop it from the index.
-        if [[ -e "$path" ]]; then
-            printf '%s\t%s\t%s\t%s\n' "$name" "$path" "ok" "$depth"
+        if [[ -e "$p" ]]; then
+            printf '%s\t%s\t%s\t%s\n' "$name" "$p" "ok" "$depth"
         else
-            printf '%s\t%s\t%s\t%s\n' "$name" "$path" "missing" "$depth"
+            printf '%s\t%s\t%s\t%s\n' "$name" "$p" "missing" "$depth"
         fi
     done < "$rc"
 }
@@ -137,14 +137,25 @@ _hop_index() {
     local -a prune
 
     # Build the -prune expression once: \( -name .git -o -name ... \)
-    prune=('(')
-    for s in $_HOP_SKIP; do
-        prune+=(-name "$s" -o)
-    done
-    prune[-1]=')'          # replace the trailing -o
+    # An empty skip list must still yield a valid expression — `-name ''`
+    # matches nothing, keeping find happy if a user declares _HOP_SKIP=().
+    if (( ${#_HOP_SKIP} )); then
+        prune=('(')
+        for s in $_HOP_SKIP; do
+            prune+=(-name "$s" -o)
+        done
+        prune[-1]=')'      # replace the trailing -o
+    else
+        prune=('(' -name '' ')')
+    fi
 
     while IFS=$'\t' read -r alias p st depth; do
-        [[ "$st" == "ok" ]] || continue
+        if [[ "$st" != "ok" ]]; then
+            # Spec: a dead bookmark is excluded from indexing but still shown,
+            # marked, so the picker itself signals the config needs fixing.
+            printf '%s\t%s\t%s\t%s\t%s\n' "dir" "$p" "$alias  [missing]" "1" "0"
+            continue
+        fi
 
         # The bookmark itself is always present and always a favorite. It may
         # be a file — a starred file is a legal bookmark.
@@ -241,6 +252,14 @@ _hop_fav_add() {
         return 0
     fi
 
+    # A hand-edited file may lack a final newline; appending straight onto it
+    # would merge the new entry into the last line, corrupting both. tail -c 1
+    # is BSD/GNU-common; $(...) strips a newline, so non-empty output means
+    # the last byte is NOT a newline.
+    if [[ -s "$rc" && -n "$(tail -c 1 "$rc")" ]]; then
+        print >> "$rc"
+    fi
+
     taken=(${(f)"$(_hop_parse "$rc" 2>/dev/null | cut -f1)"})
     printf '%s\t%s\n' "$(_hop_alias_for "$target" "${taken[@]}")" "$target" >> "$rc"
 }
@@ -286,7 +305,14 @@ _hop_fav_remove() {
     done < "$rc"
 
     tmpf="$rc.hoptmp$$"
-    print -rl -- "${keep[@]}" > "$tmpf" && mv "$tmpf" "$rc"
+    if (( ${#keep} )); then
+        print -rl -- "${keep[@]}" > "$tmpf"
+    else
+        : > "$tmpf"        # print -rl with an empty array emits one newline
+    fi
+    # cat-into rather than mv: keeps the config file's inode, so permissions
+    # like chmod 600 survive an unfavorite.
+    cat "$tmpf" > "$rc" && rm -f "$tmpf"
 }
 
 # ---------------------------------------------------------------------------
@@ -398,6 +424,19 @@ _hop_pick() {
 }
 
 # ---------------------------------------------------------------------------
+# _hop_toggle_fav — add the path if unbookmarked, remove it if bookmarked
+# ---------------------------------------------------------------------------
+_hop_toggle_fav() {
+    emulate -L zsh
+    local target="$1"
+    if _hop_parse 2>/dev/null | cut -f2 | grep -qxF -- "$target"; then
+        _hop_fav_remove "$target"
+    else
+        _hop_fav_add "$target"
+    fi
+}
+
+# ---------------------------------------------------------------------------
 # _hop_seed_rc — write a commented starter file. Does NOT scan the disk.
 # ---------------------------------------------------------------------------
 _hop_seed_rc() {
@@ -482,12 +521,22 @@ hop() {
             print -u2 "hop: $target no longer exists. Fix it with: hop -e"
             return 1
         fi
-        kids="$(_hop_children "$target")"
-        if [[ -z "$kids" ]]; then
-            print -u2 "hop: ${target:t} has no subdirectories"
-            return 1
-        fi
-        target="$(print -r -- "$kids" | _hop_pick '' "${target:t}/ > ")" || return $?
+        # Same exit-2 toggle protocol as the search branch — Ctrl-S must not
+        # fall out of descend mode as a bare error return.
+        local rc_pick base="$target"
+        while true; do
+            kids="$(_hop_children "$base")"
+            if [[ -z "$kids" ]]; then
+                print -u2 "hop: ${base:t} has no subdirectories"
+                return 1
+            fi
+            target="$(print -r -- "$kids" | _hop_pick '' "${base:t}/ > ")"
+            rc_pick=$?
+            (( rc_pick == 0 )) && break
+            (( rc_pick == 1 )) && return 1
+            (( rc_pick != 2 )) && return $rc_pick
+            _hop_toggle_fav "$target"
+        done
     elif [[ -z "$target" ]]; then
         # No exact hit (or no argument): search the whole index, seeded with
         # the argument. Exit 2 means "toggle this favorite and come back", so
@@ -502,11 +551,7 @@ hop() {
             (( rc_pick != 2 )) && return $rc_pick # fzf missing, etc.
 
             # rc_pick == 2: toggle the favorite, rebuild, reopen.
-            if print -r -- "$records" | awk -F'\t' -v p="$target" '$2==p{f=1} END{exit !f}'; then
-                _hop_fav_remove "$target"
-            else
-                _hop_fav_add "$target"
-            fi
+            _hop_toggle_fav "$target"
             records="$(_hop_parse)" || return 1
             target=''
         done

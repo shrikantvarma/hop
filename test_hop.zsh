@@ -274,10 +274,20 @@ check "files are tagged file" \
 check "dirs are tagged dir" \
       "dir" "$(print -r -- "$i2" | awk -F'\t' '$3=="r/sub"{print $1}')"
 
-# missing bookmarks contribute nothing
+# Spec: a dead bookmark is excluded from indexing but still LISTED, marked,
+# so the picker itself signals the config needs fixing.
 im="$(irecs "gone	$ix/nowhere	missing	2" | _hop_index)"
-check "missing bookmark yields no records" \
-      "" "$im"
+check "missing bookmark is listed once, marked" \
+      "1" "$(print -r -- "$im" | grep -c 'gone  \[missing\]')"
+check "missing bookmark is not walked" \
+      "1" "$(print -r -- "$im" | grep -c .)"
+check "missing marker survives _hop_format" \
+      "1" "$(print -r -- "$im" | _hop_format | grep -c '★ gone  \[missing\]')"
+
+# An empty skip list must not break the find expression (silent degradation).
+iempty="$(_HOP_SKIP=(); irecs "r	$ix/root	ok	1" | _hop_index | grep -c .)"
+check "empty _HOP_SKIP still indexes children" \
+      "4" "$iempty"
 
 # multiple bookmarks
 imulti="$(irecs "r	$ix/root	ok	0" "f	$ix/flat	ok	0" | _hop_index)"
@@ -394,6 +404,79 @@ check "removing an absent path is a no-op" \
 
 check "add to an unwritable file returns non-zero" \
       "1" "$(chmod a-w "$frc"; _hop_fav_add "$tmp/Other2" "$frc" >/dev/null 2>&1; print $?; chmod u+w "$frc")"
+
+# CRITICAL regression guard: appending to a hand-edited file with no final
+# newline must not merge the new entry into the last line.
+nnl="$tmp/nonewlinerc"
+printf 'other\t%s' "$tmp/Other" > "$nnl"          # note: no trailing \n
+_hop_fav_add "$tmp/FavTarget" "$nnl"
+check "add to a file lacking a final newline keeps both entries" \
+      "2" "$(_hop_parse "$nnl" 2>/dev/null | grep -c '	ok	')"
+check "no-newline add does not corrupt the prior entry" \
+      "$tmp/Other" "$(_hop_parse "$nnl" 2>/dev/null | awk -F'\t' '$1=="other"{print $2}')"
+
+# True byte-for-byte round-trip via cmp (the \$(<) idiom strips trailing
+# newlines and can hide off-by-one-newline bugs).
+cp "$frc" "$tmp/favrc.orig"
+_hop_fav_add "$tmp/FavTarget" "$frc"
+_hop_fav_remove "$tmp/FavTarget" "$frc"
+check "add+remove round-trip is byte-identical (cmp)" \
+      "0" "$(cmp -s "$frc" "$tmp/favrc.orig"; print $?)"
+
+# Removing the last entry leaves a genuinely empty file, not one newline.
+lone="$tmp/lonerc"
+printf 'only\t%s\n' "$tmp/Other" > "$lone"
+_hop_fav_remove "$tmp/Other" "$lone"
+check "removing the last entry leaves an empty file" \
+      "0" "$(wc -c < "$lone" | tr -d ' ')"
+
+# Rewrite must preserve the config file's permissions (inode kept).
+perm="$tmp/permrc"
+printf 'only\t%s\n' "$tmp/Other" > "$perm"; chmod 600 "$perm"
+_hop_fav_remove "$tmp/Other" "$perm"
+check "remove preserves file permissions" \
+      "600" "$(stat -f '%Lp' "$perm" 2>/dev/null || stat -c '%a' "$perm")"
+
+# --- ctrl-s toggle wiring through hop() (stubbed picker) -------------------
+print ""
+print "hop toggle wiring"
+
+mkdir -p "$tmp/TogRoot/sub"
+
+# The stub runs inside hop()'s own command substitution, so shell-variable
+# state cannot escape it — call-counting must live on the filesystem.
+check "ctrl-s in the search picker adds a favorite and reopens" \
+      "1" "$(
+        togrc="$tmp/togrc1"; printf 'root\t%s\tdepth=1\n' "$tmp/TogRoot" > "$togrc"
+        HOPRC="$togrc"; flag="$tmp/togflag1"; rm -f "$flag"
+        _hop_pick() { print -r -- "$tmp/TogRoot/sub"; [[ -e "$flag" ]] && return 0; : > "$flag"; return 2 }
+        hop >/dev/null 2>&1
+        _hop_parse "$togrc" 2>/dev/null | grep -c "	$tmp/TogRoot/sub	"
+      )"
+
+check "ctrl-s in descend mode (hop alias/) also toggles" \
+      "1" "$(
+        togrc="$tmp/togrc2"; printf 'root\t%s\tdepth=1\n' "$tmp/TogRoot" > "$togrc"
+        HOPRC="$togrc"; flag="$tmp/togflag2"; rm -f "$flag"
+        _hop_pick() { print -r -- "$tmp/TogRoot/sub"; [[ -e "$flag" ]] && return 0; : > "$flag"; return 2 }
+        hop root/ >/dev/null 2>&1
+        _hop_parse "$togrc" 2>/dev/null | grep -c "	$tmp/TogRoot/sub	"
+      )"
+
+check "second ctrl-s on the same item removes the favorite" \
+      "0" "$(
+        togrc="$tmp/togrc3"; printf 'root\t%s\tdepth=1\n' "$tmp/TogRoot" > "$togrc"
+        HOPRC="$togrc"; f1="$tmp/togflag3a" f2="$tmp/togflag3b"; rm -f "$f1" "$f2"
+        _hop_pick() {
+            print -r -- "$tmp/TogRoot/sub"
+            if [[ ! -e "$f1" ]]; then : > "$f1"; return 2
+            elif [[ ! -e "$f2" ]]; then : > "$f2"; return 2
+            fi
+            return 0
+        }
+        hop >/dev/null 2>&1
+        _hop_parse "$togrc" 2>/dev/null | grep -c "	$tmp/TogRoot/sub	"
+      )"
 
 # --- _hop_format ----------------------------------------------------------
 print ""

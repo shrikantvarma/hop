@@ -187,7 +187,7 @@ survive intact.
 zsh test_hop.zsh
 ```
 
-90 assertions covering config parsing, indexing, ranking, alias derivation,
+101 assertions covering config parsing, indexing, ranking, alias derivation,
 config rewriting (byte-for-byte round-trip), and key handling — including
 listing through symlinks. The fzf picker itself is interactive and is
 verified by hand.
