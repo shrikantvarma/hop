@@ -69,6 +69,12 @@ git clone https://github.com/shrikantvarma/hop.git \
 ```
 </details>
 
+## First run
+
+With no bookmarks yet, `hop` simply opens the picker in your current
+directory. Browse with `→`/`←`, press `Ctrl-S` on anything to make it your
+first bookmark — no config editing required.
+
 ## Bookmarks
 
 Bookmarks live in `~/.hoprc`, one per line: an alias, whitespace, a path.
@@ -187,7 +193,7 @@ survive intact.
 zsh test_hop.zsh
 ```
 
-101 assertions covering config parsing, indexing, ranking, alias derivation,
+103 assertions covering config parsing, indexing, ranking, alias derivation,
 config rewriting (byte-for-byte round-trip), and key handling — including
 listing through symlinks. The fzf picker itself is interactive and is
 verified by hand.

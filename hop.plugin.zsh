@@ -424,6 +424,33 @@ _hop_pick() {
 }
 
 # ---------------------------------------------------------------------------
+# _hop_browse — descend-mode picker loop rooted at $1; prints the chosen path
+#
+# Same exit-2 toggle protocol as the search branch: Ctrl-S toggles the
+# highlighted item's favorite status and reopens the picker.
+# ---------------------------------------------------------------------------
+_hop_browse() {
+    emulate -L zsh
+    local base="$1" kids sel rc_pick
+    while true; do
+        kids="$(_hop_children "$base")"
+        if [[ -z "$kids" ]]; then
+            print -u2 "hop: ${base:t} has no subdirectories"
+            return 1
+        fi
+        sel="$(print -r -- "$kids" | _hop_pick '' "${base:t}/ > ")"
+        rc_pick=$?
+        if (( rc_pick == 0 )); then
+            print -r -- "$sel"
+            return 0
+        fi
+        (( rc_pick == 1 )) && return 1
+        (( rc_pick != 2 )) && return $rc_pick
+        _hop_toggle_fav "$sel"
+    done
+}
+
+# ---------------------------------------------------------------------------
 # _hop_toggle_fav — add the path if unbookmarked, remove it if bookmarked
 # ---------------------------------------------------------------------------
 _hop_toggle_fav() {
@@ -450,7 +477,7 @@ _hop_seed_rc() {
 # code    ~/Code
 # notes   ~/Documents/Notes
 EOF
-    print -u2 "hop: created $HOPRC — add bookmarks with: hop -e"
+    print -u2 "hop: created $HOPRC — ★ favorites with Ctrl-S, or edit with: hop -e"
     return 0
 }
 
@@ -473,6 +500,9 @@ hop() {
             print -r -- "       hop -v | --version  print version"
             print -r -- ""
             print -r -- "in the picker:  Enter hop   →/Tab descend   ←/S-Tab up   ^S favorite"
+            print -r -- ""
+            print -r -- "first run: with no bookmarks, hop browses from the current directory —"
+            print -r -- "Ctrl-S there creates your first bookmark"
             return 0
             ;;
         -v|--version)
@@ -491,16 +521,21 @@ hop() {
     fi
 
     records="$(_hop_parse)" || return 1
-    if [[ -z "$records" ]]; then
-        print -u2 "hop: no bookmarks in $HOPRC. Add some with: hop -e"
-        return 1
-    fi
 
     if [[ "$1" == "-l" || "$1" == "--list" ]]; then
         print -r -- "$records" | awk -F'\t' '{
             printf "  %-22s %s%s  depth=%s\n", $1, $2, ($3=="missing" ? "  [missing]" : ""), $4
         }'
         return 0
+    fi
+
+    # First run: nothing bookmarked yet. Browse from the current directory
+    # instead of erroring into a config file — Ctrl-S on anything creates the
+    # first bookmark, no hand-editing required.
+    if [[ -z "$records" ]]; then
+        print -u2 "hop: no bookmarks yet — browsing from $PWD (★ with Ctrl-S, Enter to jump)"
+        target="$(_hop_browse "$PWD")" || return $?
+        arg=''
     fi
 
     # A trailing slash means "open the picker INSIDE this bookmark" rather than
@@ -521,22 +556,7 @@ hop() {
             print -u2 "hop: $target no longer exists. Fix it with: hop -e"
             return 1
         fi
-        # Same exit-2 toggle protocol as the search branch — Ctrl-S must not
-        # fall out of descend mode as a bare error return.
-        local rc_pick base="$target"
-        while true; do
-            kids="$(_hop_children "$base")"
-            if [[ -z "$kids" ]]; then
-                print -u2 "hop: ${base:t} has no subdirectories"
-                return 1
-            fi
-            target="$(print -r -- "$kids" | _hop_pick '' "${base:t}/ > ")"
-            rc_pick=$?
-            (( rc_pick == 0 )) && break
-            (( rc_pick == 1 )) && return 1
-            (( rc_pick != 2 )) && return $rc_pick
-            _hop_toggle_fav "$target"
-        done
+        target="$(_hop_browse "$target")" || return $?
     elif [[ -z "$target" ]]; then
         # No exact hit (or no argument): search the whole index, seeded with
         # the argument. Exit 2 means "toggle this favorite and come back", so

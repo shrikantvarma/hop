@@ -463,6 +463,23 @@ check "ctrl-s in descend mode (hop alias/) also toggles" \
         _hop_parse "$togrc" 2>/dev/null | grep -c "	$tmp/TogRoot/sub	"
       )"
 
+check "empty config: hop browses from cwd instead of erroring" \
+      "$tmp/TogRoot/sub" "$(
+        togrc="$tmp/togrc4"; : > "$togrc"
+        HOPRC="$togrc"
+        _hop_pick() { print -r -- "$tmp/TogRoot/sub"; return 0 }
+        cd "$tmp/TogRoot" && hop >/dev/null 2>&1 && pwd
+      )"
+
+check "first ctrl-s bootstraps the config from scratch" \
+      "1" "$(
+        togrc="$tmp/togrc5"; : > "$togrc"
+        HOPRC="$togrc"; flag="$tmp/togflag5"; rm -f "$flag"
+        _hop_pick() { print -r -- "$tmp/TogRoot/sub"; [[ -e "$flag" ]] && return 0; : > "$flag"; return 2 }
+        cd "$tmp/TogRoot" && hop >/dev/null 2>&1
+        _hop_parse "$togrc" 2>/dev/null | grep -c "	$tmp/TogRoot/sub	"
+      )"
+
 check "second ctrl-s on the same item removes the favorite" \
       "0" "$(
         togrc="$tmp/togrc3"; printf 'root\t%s\tdepth=1\n' "$tmp/TogRoot" > "$togrc"
