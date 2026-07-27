@@ -23,6 +23,10 @@ fi
 # Extra options passed through to fzf, e.g. HOP_FZF_OPTS='--height=80%'
 : ${HOP_FZF_OPTS:=}
 
+# Index depth for bookmarks without an explicit depth= token. Raise it if your
+# favorites are shallow anchors over deep trees (vaults, monorepos).
+: ${HOP_DEFAULT_DEPTH:=2}
+
 # ---------------------------------------------------------------------------
 # _hop_parse — pure text transform, no side effects
 #
@@ -52,13 +56,13 @@ _hop_parse() {
             p="$match[2]"
             depth="$match[3]"
             if [[ ! "$depth" =~ '^[0-9]+$' ]]; then
-                print -u2 "hop: $rc:$lineno: depth=$depth is not a number -- using 2"
-                depth=2
+                print -u2 "hop: $rc:$lineno: depth=$depth is not a number -- using $HOP_DEFAULT_DEPTH"
+                depth=$HOP_DEFAULT_DEPTH
             fi
         elif [[ "$line" =~ '^[[:space:]]*([^[:space:]]+)[[:space:]]+(.*[^[:space:]])[[:space:]]*$' ]]; then
             name="$match[1]"
             p="$match[2]"
-            depth=2
+            depth=$HOP_DEFAULT_DEPTH
         else
             print -u2 "hop: $rc:$lineno: malformed (no path) -- skipped"
             continue
@@ -384,7 +388,7 @@ _hop_pick() {
               --expect=right,left,tab,btab,ctrl-s \
               --preview='ls -1p {1} 2>/dev/null | head -40' \
               --preview-window='right:45%:wrap' \
-              --header='Enter hop   →/Tab descend   ←/S-Tab up   ^S favorite' \
+              --header='Enter hop   →/Tab descend   ←/S-Tab up   ^S favorite/unfavorite' \
               ${=HOP_FZF_OPTS})" || return 1
 
         out="$(_hop_split_expect "$out")"
@@ -520,7 +524,7 @@ hop() {
             print -r -- "       hop -e | --edit     edit $HOPRC"
             print -r -- "       hop -v | --version  print version"
             print -r -- ""
-            print -r -- "in the picker:  Enter hop   →/Tab descend   ←/S-Tab up   ^S favorite"
+            print -r -- "in the picker:  Enter hop   →/Tab descend   ←/S-Tab up   ^S favorite/unfavorite"
             print -r -- ""
             print -r -- "first run: with no bookmarks, hop browses from the current directory —"
             print -r -- "Ctrl-S there creates your first bookmark"
@@ -589,8 +593,19 @@ hop() {
     # first bookmark, no hand-editing required.
     if [[ -z "$records" ]]; then
         print -u2 "hop: no bookmarks yet — browsing from $PWD (★ with Ctrl-S, Enter to jump)"
-        target="$(_hop_browse "$PWD")" || return $?
+        local rc_boot
+        target="$(_hop_browse "$PWD")"
+        rc_boot=$?
         arg=''
+        if (( rc_boot != 0 )); then
+            # Esc after starring things means "done curating" — fall through
+            # to the search picker over the new favorites instead of forcing
+            # a quit-and-rerun. Esc with nothing starred stays a plain cancel.
+            records="$(_hop_parse)" || return 1
+            [[ -z "$records" ]] && return $rc_boot
+            print -u2 "hop: favorites saved — searching them now (Esc again to quit)"
+            target=''
+        fi
     fi
 
     # A trailing slash means "open the picker INSIDE this bookmark" rather than

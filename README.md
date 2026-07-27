@@ -116,7 +116,7 @@ the full path, so typing a real directory name finds it.
 | `Enter` | cd to the highlighted directory |
 | `→` or `Tab` | descend into it |
 | `←` or `Shift-Tab` | back out one level |
-| `Ctrl-S` | favorite / unfavorite the highlighted item |
+| `Ctrl-S` | favorite / unfavorite the highlighted item (label: `^S favorite/unfavorite`) |
 | `Ctrl-F` / `Ctrl-B` | move the cursor within the query |
 | `Esc` | cancel, shell stays put |
 
@@ -156,6 +156,7 @@ Set these **before** sourcing the plugin.
 | --- | --- | --- |
 | `HOPRC` | `~/.hoprc` | Bookmarks file location |
 | `HOP_FZF_OPTS` | _(empty)_ | Extra options passed to fzf |
+| `HOP_DEFAULT_DEPTH` | `2` | Index depth for bookmarks without a `depth=` token |
 | `_HOP_SKIP` | see below | Array of directory names hidden when descending |
 
 ```sh
@@ -194,7 +195,7 @@ survive intact.
 zsh test_hop.zsh
 ```
 
-110 assertions covering config parsing, indexing, ranking, alias derivation,
+113 assertions covering config parsing, indexing, ranking, alias derivation,
 config rewriting (byte-for-byte round-trip), and key handling — including
 listing through symlinks. The fzf picker itself is interactive and is
 verified by hand.

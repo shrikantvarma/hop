@@ -463,14 +463,44 @@ check "ctrl-s in descend mode (hop alias/) also toggles" \
         _hop_parse "$togrc" 2>/dev/null | grep -c "	$tmp/TogRoot/sub	"
       )"
 
+check "HOP_DEFAULT_DEPTH overrides the fallback depth" \
+      "5" "$(
+        HOP_DEFAULT_DEPTH=5
+        print -r -- "plain	$tmp/plain" > "$tmp/ddrc"
+        _hop_parse "$tmp/ddrc" | cut -f4
+      )"
+
+check "bootstrap Esc after starring falls through to search" \
+      "1" "$(
+        togrc="$tmp/togrc11"; : > "$togrc"
+        HOPRC="$togrc"; f1="$tmp/bf1" f2="$tmp/bf2"; seen="$tmp/bootseen"; rm -f "$f1" "$f2" "$seen"
+        _hop_pick() {
+            if [[ ! -e "$f1" ]]; then : > "$f1"; cat > /dev/null; print -r -- "$tmp/TogRoot/sub"; return 2   # star it
+            elif [[ ! -e "$f2" ]]; then : > "$f2"; cat > /dev/null; return 1                                  # Esc browse
+            fi
+            cat > "$seen"; print -r -- "$tmp/TogRoot/sub"; return 0                                           # search view
+        }
+        cd "$tmp/TogRoot" && hop >/dev/null 2>&1
+        grep -c '★ sub' "$seen"
+      )"
+
+check "bootstrap Esc with nothing starred stays a cancel" \
+      "1" "$(
+        togrc="$tmp/togrc12"; : > "$togrc"
+        HOPRC="$togrc"
+        _hop_pick() { cat > /dev/null; return 1 }
+        cd "$tmp/TogRoot" && hop >/dev/null 2>&1; print $?
+      )"
+
 check "browse view stars an item as soon as it is favorited" \
       "1" "$(
         togrc="$tmp/togrc10"; : > "$togrc"
-        HOPRC="$togrc"; flag="$tmp/togflag10"; seen="$tmp/browseseen"; rm -f "$flag"
+        HOPRC="$togrc"; flag="$tmp/togflag10" flagb="$tmp/togflag10b"; seen="$tmp/browseseen"; rm -f "$flag" "$flagb"
         _hop_pick() {
-            if [[ -e "$flag" ]]; then cat > "$seen"; return 1
-            else cat > /dev/null; : > "$flag"; print -r -- "$tmp/TogRoot/sub"; return 2
+            if [[ ! -e "$flag" ]]; then : > "$flag"; cat > /dev/null; print -r -- "$tmp/TogRoot/sub"; return 2   # star it
+            elif [[ ! -e "$flagb" ]]; then : > "$flagb"; cat > "$seen"; return 1    # capture reopened browse view
             fi
+            cat > /dev/null; return 1     # post-bootstrap search view: not under test here
         }
         mkdir -p "$tmp/TogRoot/other"
         cd "$tmp/TogRoot" && hop >/dev/null 2>&1
