@@ -5,7 +5,7 @@
 # working directory, so `cd` inside a script dies with the script. Changing the
 # interactive shell's directory requires code running in that shell.
 
-typeset -g HOP_VERSION="0.1.0"
+typeset -g HOP_VERSION="0.2.0"
 
 # Config file. Override by setting HOPRC before sourcing.
 : ${HOPRC:=$HOME/.hoprc}
@@ -433,7 +433,7 @@ hop() {
             print -r -- "       hop -e | --edit     edit $HOPRC"
             print -r -- "       hop -v | --version  print version"
             print -r -- ""
-            print -r -- "in the picker:  Enter hop   →/Tab descend   ←/S-Tab up"
+            print -r -- "in the picker:  Enter hop   →/Tab descend   ←/S-Tab up   ^S favorite"
             return 0
             ;;
         -v|--version)
@@ -459,7 +459,7 @@ hop() {
 
     if [[ "$1" == "-l" || "$1" == "--list" ]]; then
         print -r -- "$records" | awk -F'\t' '{
-            printf "  %-22s %s%s\n", $1, $2, ($3=="missing" ? "  [missing]" : "")
+            printf "  %-22s %s%s  depth=%s\n", $1, $2, ($3=="missing" ? "  [missing]" : ""), $4
         }'
         return 0
     fi
@@ -489,12 +489,33 @@ hop() {
         fi
         target="$(print -r -- "$kids" | _hop_pick '' "${target:t}/ > ")" || return $?
     elif [[ -z "$target" ]]; then
-        # No exact hit (or no argument): open the picker, seeded with the
-        # argument. A trailing slash on a non-alias degrades to a plain query.
-        target="$(print -r -- "$records" | _hop_format | _hop_pick "$arg")" || return $?
+        # No exact hit (or no argument): search the whole index, seeded with
+        # the argument. Exit 2 means "toggle this favorite and come back", so
+        # loop until the user selects or cancels.
+        local rc_pick
+        while true; do
+            target="$(print -r -- "$records" | _hop_index | _hop_rank | _hop_format | _hop_pick "$arg")"
+            rc_pick=$?
+
+            (( rc_pick == 0 )) && break
+            (( rc_pick == 1 )) && return 1        # cancelled
+            (( rc_pick != 2 )) && return $rc_pick # fzf missing, etc.
+
+            # rc_pick == 2: toggle the favorite, rebuild, reopen.
+            if print -r -- "$records" | awk -F'\t' -v p="$target" '$2==p{f=1} END{exit !f}'; then
+                _hop_fav_remove "$target"
+            else
+                _hop_fav_add "$target"
+            fi
+            records="$(_hop_parse)" || return 1
+            target=''
+        done
     fi
 
     [[ -z "$target" ]] && return 1          # picker cancelled
+
+    # Landing on a file means landing in its directory. Files are never opened.
+    [[ -f "$target" ]] && target="${target:h}"
 
     if [[ ! -d "$target" ]]; then
         print -u2 "hop: $target no longer exists. Fix it with: hop -e"

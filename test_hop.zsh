@@ -418,6 +418,33 @@ check "ctrl-s is parsed by _hop_split_expect" \
       $'ctrl-s\t/Users/x/Code' \
       "$(_hop_split_expect $'ctrl-s\n/Users/x/Code\t★ code')"
 
+# --- hop orchestration (non-interactive paths) ----------------------------
+print ""
+print "hop"
+
+hrc="$tmp/hoprc_orch"
+mkdir -p "$tmp/OrchRoot/sub"
+touch "$tmp/OrchRoot/file.md"
+cat > "$hrc" <<EOF
+orch  $tmp/OrchRoot  depth=1
+EOF
+
+check "-l lists the bookmark" \
+      "1" "$(HOPRC="$hrc" hop -l | grep -c 'orch')"
+
+check "-l shows the depth" \
+      "1" "$(HOPRC="$hrc" hop -l | grep -c 'depth=1')"
+
+check "exact alias still jumps without a picker" \
+      "$tmp/OrchRoot" "$(HOPRC="$hrc" hop orch >/dev/null 2>&1 && pwd)"
+cd "$tmp"
+
+check "-v reports a 0.2 version" \
+      "1" "$(HOPRC="$hrc" hop -v | grep -c '0\.2')"
+
+check "help mentions the favorite key" \
+      "1" "$(HOPRC="$hrc" hop -h | grep -ci 'favorite')"
+
 print ""
 print "$pass passed, $fail failed"
 (( fail == 0 ))
