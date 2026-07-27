@@ -495,6 +495,7 @@ hop() {
             print -r -- "       hop <text>          pick, pre-filtered by <text>"
             print -r -- "       hop <alias>         jump straight there (exact alias only)"
             print -r -- "       hop <alias>/        open the picker INSIDE that bookmark"
+            print -r -- "       hop -f | --favorites manage favorites: Enter jumps, Ctrl-S removes"
             print -r -- "       hop -l | --list     list bookmarks"
             print -r -- "       hop -e | --edit     edit $HOPRC"
             print -r -- "       hop -v | --version  print version"
@@ -527,6 +528,40 @@ hop() {
             printf "  %-22s %s%s  depth=%s\n", $1, $2, ($3=="missing" ? "  [missing]" : ""), $4
         }'
         return 0
+    fi
+
+    if [[ "$1" == "-f" || "$1" == "--favorites" ]]; then
+        if [[ -z "$records" ]]; then
+            print -u2 "hop: no favorites yet — run hop and press Ctrl-S on anything"
+            return 1
+        fi
+        local rc_pick
+        while true; do
+            # Forcing depth=0 makes _hop_index emit each bookmark and walk
+            # nothing beneath it: the favorites list, nothing else.
+            target="$(print -r -- "$records" \
+                | awk 'BEGIN{FS=OFS="\t"} {$4=0; print}' \
+                | _hop_index | _hop_rank | _hop_format \
+                | _hop_pick '' 'favorites > ')"
+            rc_pick=$?
+            (( rc_pick == 0 )) && break
+            (( rc_pick == 1 )) && return 1
+            (( rc_pick != 2 )) && return $rc_pick
+            _hop_toggle_fav "$target"
+            records="$(_hop_parse)" || return 1
+            if [[ -z "$records" ]]; then
+                print -u2 "hop: favorites list is now empty"
+                return 0
+            fi
+            target=''
+        done
+        [[ -f "$target" ]] && target="${target:h}"
+        if [[ ! -d "$target" ]]; then
+            print -u2 "hop: $target no longer exists. Fix it with: hop -e"
+            return 1
+        fi
+        cd "$target"
+        return $?
     fi
 
     # First run: nothing bookmarked yet. Browse from the current directory

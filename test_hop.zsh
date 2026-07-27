@@ -463,6 +463,40 @@ check "ctrl-s in descend mode (hop alias/) also toggles" \
         _hop_parse "$togrc" 2>/dev/null | grep -c "	$tmp/TogRoot/sub	"
       )"
 
+check "-f shows only bookmarks, no indexed children" \
+      "0" "$(
+        togrc="$tmp/togrc6"; printf 'root\t%s\tdepth=2\n' "$tmp/TogRoot" > "$togrc"
+        HOPRC="$togrc"; seen="$tmp/favseen"
+        _hop_pick() { cat > "$seen"; return 1 }
+        hop -f >/dev/null 2>&1
+        grep -c "TogRoot/sub" "$seen"
+      )"
+
+check "-f lists the bookmark itself" \
+      "1" "$(
+        togrc="$tmp/togrc7"; printf 'root\t%s\tdepth=2\n' "$tmp/TogRoot" > "$togrc"
+        HOPRC="$togrc"; seen="$tmp/favseen2"
+        _hop_pick() { cat > "$seen"; return 1 }
+        hop -f >/dev/null 2>&1
+        grep -c '★ root' "$seen"
+      )"
+
+check "ctrl-s in -f removes the favorite from the config" \
+      "0" "$(
+        togrc="$tmp/togrc8"; printf 'root\t%s\tdepth=2\n' "$tmp/TogRoot" > "$togrc"
+        HOPRC="$togrc"
+        _hop_pick() { print -r -- "$tmp/TogRoot"; return 2 }
+        hop -f >/dev/null 2>&1
+        _hop_parse "$togrc" 2>/dev/null | grep -c .
+      )"
+
+check "-f with no favorites exits non-zero with a hint" \
+      "1" "$(
+        togrc="$tmp/togrc9"; : > "$togrc"
+        HOPRC="$togrc"
+        hop -f >/dev/null 2>&1; print $?
+      )"
+
 check "empty config: hop browses from cwd instead of erroring" \
       "$tmp/TogRoot/sub" "$(
         togrc="$tmp/togrc4"; : > "$togrc"
@@ -543,7 +577,7 @@ check "-v reports a 0.2 version" \
       "1" "$(HOPRC="$hrc" hop -v | grep -c '0\.2')"
 
 check "help mentions the favorite key" \
-      "1" "$(HOPRC="$hrc" hop -h | grep -ci 'favorite')"
+      "0" "$(HOPRC="$hrc" hop -h | grep -qi 'favorite'; print $?)"
 
 print ""
 print "$pass passed, $fail failed"

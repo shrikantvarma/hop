@@ -100,6 +100,7 @@ hop                # search everything in your bookmarked trees
 hop goals          # jump to the best match for "goals"
 hop notes          # exact alias -> jump immediately, no picker
 hop notes/         # open the picker INSIDE ~/Documents/Notes
+hop -f             # manage favorites: Enter jumps, Ctrl-S removes
 hop -l             # list bookmarks
 hop -e             # edit ~/.hoprc
 hop -h             # help
@@ -193,7 +194,7 @@ survive intact.
 zsh test_hop.zsh
 ```
 
-103 assertions covering config parsing, indexing, ranking, alias derivation,
+107 assertions covering config parsing, indexing, ranking, alias derivation,
 config rewriting (byte-for-byte round-trip), and key handling — including
 listing through symlinks. The fzf picker itself is interactive and is
 verified by hand.
