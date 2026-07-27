@@ -141,37 +141,49 @@ print "_hop_children"
 
 kid="$tmp/kids"
 mkdir -p "$kid/Assets" "$kid/Projects" "$kid/.git" "$kid/node_modules" "$kid/.hidden_keep"
-touch "$kid/a_file.md"
+touch "$kid/a_file.md" "$kid/b_file.txt"
 
 # The vault is reached through symlinks, so cover that explicitly.
 ln -s "$kid" "$tmp/link_to_kids"
 
 names() { _hop_children "$1" | cut -f2 | sort | tr '\n' ' '; }
 
-check "lists immediate subdirs only" \
-      "Assets Projects " \
-      "$(_hop_children "$kid" | cut -f2 | grep -vE '^\.' | sort | tr '\n' ' ')"
+check "lists subdirs with a trailing slash" \
+      "Assets/ Projects/ " \
+      "$(_hop_children "$kid" | awk -F'\t' '$3=="dir"' | cut -f2 | grep -v '^\.' | sort | tr '\n' ' ')"
+
+check "lists files too" \
+      "a_file.md b_file.txt " \
+      "$(_hop_children "$kid" | awk -F'\t' '$3=="file"' | cut -f2 | sort | tr '\n' ' ')"
+
+check "tags kind correctly for dirs" \
+      "dir" \
+      "$(_hop_children "$kid" | awk -F'\t' '$2=="Assets/"{print $3}')"
+
+check "tags kind correctly for files" \
+      "file" \
+      "$(_hop_children "$kid" | awk -F'\t' '$2=="a_file.md"{print $3}')"
+
+check "directories are emitted before files" \
+      "dir" \
+      "$(_hop_children "$kid" | head -1 | cut -f3)"
 
 check "skips .git and node_modules" \
       "0" \
-      "$(_hop_children "$kid" | cut -f2 | grep -cE '^(\.git|node_modules)$')"
+      "$(_hop_children "$kid" | cut -f2 | grep -cE '^(\.git|node_modules)/$')"
 
 check "keeps non-noise dotdirs" \
       "1" \
-      "$(_hop_children "$kid" | cut -f2 | grep -c '^\.hidden_keep$')"
-
-check "excludes plain files" \
-      "0" \
-      "$(_hop_children "$kid" | cut -f2 | grep -c 'a_file.md')"
+      "$(_hop_children "$kid" | cut -f2 | grep -c '^\.hidden_keep/$')"
 
 check "emits absolute paths in field 1" \
       "$kid/Assets" \
-      "$(_hop_children "$kid" | awk -F'\t' '$2=="Assets"{print $1}')"
+      "$(_hop_children "$kid" | awk -F'\t' '$2=="Assets/"{print $1}')"
 
 check "descends through a SYMLINKED parent (the vault case)" \
       "$(names "$kid")" "$(names "$tmp/link_to_kids")"
 
-check "leaf dir yields nothing" \
+check "empty dir yields nothing" \
       "" "$(_hop_children "$kid/Assets")"
 
 check "nonexistent parent returns non-zero" \

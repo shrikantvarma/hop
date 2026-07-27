@@ -104,11 +104,19 @@ _hop_children() {
     local parent="$1" child name
     [[ -d "$parent" ]] || return 1
 
+    # Directories first, then files — the (-/N) qualifier resolves symlinks
+    # before the type test, (-.N) does the same for plain files.
     for child in "$parent"/*(-/N) "$parent"/.*(-/N); do
         name="${child:t}"
         [[ "$name" == "." || "$name" == ".." ]] && continue
         (( ${_HOP_SKIP[(Ie)$name]} )) && continue
-        printf '%s\t%s\n' "$child" "$name"
+        printf '%s\t%s/\t%s\n' "$child" "$name" "dir"
+    done
+
+    for child in "$parent"/*(-.N) "$parent"/.*(-.N); do
+        name="${child:t}"
+        (( ${_HOP_SKIP[(Ie)$name]} )) && continue
+        printf '%s\t%s\t%s\n' "$child" "$name" "file"
     done
 }
 
