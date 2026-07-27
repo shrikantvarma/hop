@@ -174,6 +174,19 @@ _hop_index() {
 }
 
 # ---------------------------------------------------------------------------
+# _hop_rank — order candidates for fzf
+#
+# fzf keeps input order among equally-scoring matches, so emission order is
+# the ranking. Favorites first, then shallower paths, then alphabetical.
+#
+# LC_ALL=C keeps the sort deterministic across machines and CI locales.
+# ---------------------------------------------------------------------------
+_hop_rank() {
+    emulate -L zsh
+    LC_ALL=C sort -t$'\t' -k4,4r -k5,5n -k3,3
+}
+
+# ---------------------------------------------------------------------------
 # _hop_split_expect — parse `fzf --expect` output into `key \t path`
 #
 # fzf emits the pressed key on line 1 (EMPTY for plain Enter) and the selected

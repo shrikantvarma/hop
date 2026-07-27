@@ -289,6 +289,29 @@ ifile="$(irecs "n	$ix/root/top.md	ok	2" | _hop_index)"
 check "a file bookmark yields one record tagged file" \
       "file	$ix/root/top.md	n	1	0" "$ifile"
 
+# --- _hop_rank ------------------------------------------------------------
+print ""
+print "_hop_rank"
+
+rin="dir	/a/deep/x	z/deep/x	0	3
+dir	/a/shallow	a/shallow	0	1
+dir	/a/fav	fav	1	0
+file	/a/also	b/also	0	1"
+
+rout="$(print -r -- "$rin" | _hop_rank | cut -f3 | tr '\n' ' ')"
+
+check "favorites rank first" \
+      "fav" "$(print -r -- "$rin" | _hop_rank | head -1 | cut -f3)"
+
+check "shallower before deeper, alphabetical within a depth" \
+      "fav a/shallow b/also z/deep/x " "$rout"
+
+check "record count is preserved" \
+      "4" "$(print -r -- "$rin" | _hop_rank | grep -c .)"
+
+check "fields are not mangled" \
+      "dir	/a/fav	fav	1	0" "$(print -r -- "$rin" | _hop_rank | head -1)"
+
 print ""
 print "$pass passed, $fail failed"
 (( fail == 0 ))
