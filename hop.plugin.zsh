@@ -79,7 +79,7 @@ _hop_parse() {
 
         # printf, not `print -r`: -r suppresses escape interpretation, which
         # would emit a literal backslash-t instead of a tab separator.
-        # -e, not -d: a bookmark may be a FILE. Ctrl-S can star a file, and
+        # -e, not -d: a bookmark may be a FILE. Settings can save a file, and
         # Enter on it lands in its parent directory. Testing -d here would
         # mark every favorited file "missing" and drop it from the index.
         if [[ -e "$p" ]]; then
@@ -351,11 +351,11 @@ _hop_format() {
 # ---------------------------------------------------------------------------
 # _hop_pick — consume `path \t display` lines on stdin, emit one chosen path
 #
-#   $1  initial query   $2  initial prompt
+#   $1  initial query   $2  initial prompt   $3  header
 #
 # Loops so the list can be replaced in place:
-#   → or Tab      descend into the highlighted directory
-#   ← or S-Tab    back out one level
+#   →             descend into the highlighted directory
+#   ←             back out one level
 #   Enter         accept
 #
 # Binding the arrows is safe because fzf aliases them to ctrl-f / ctrl-b
@@ -367,6 +367,7 @@ _hop_pick() {
 
     local query="$1"
     local lines out key sel kids prompt="${2:-hop > }"
+    local header="${3:-Enter hop   → descend   ← up}"
     local -a stack_lines stack_prompt
 
     if ! command -v fzf >/dev/null 2>&1; then
@@ -385,10 +386,10 @@ _hop_pick() {
               --reverse \
               --border \
               --prompt="$prompt" \
-              --expect=right,left,tab,btab,ctrl-s,ctrl-t \
+              --expect=right,left,ctrl-t \
               --preview='ls -1p {1} 2>/dev/null | head -40' \
               --preview-window='right:45%:wrap' \
-              --header='Enter hop   →/Tab descend   ←/S-Tab up   ^S favorite/unfavorite   ^T browse/search' \
+              --header="${header}   ^T Settings / Add more folders" \
               ${=HOP_FZF_OPTS})" || return 1
 
         out="$(_hop_split_expect "$out")"
@@ -397,7 +398,7 @@ _hop_pick() {
         query=''                       # don't re-seed after the first round
 
         case "$key" in
-            right|tab)
+            right)
                 kids="$(_hop_children "$sel" | _hop_mark_favs)"
                 if [[ -n "$kids" ]]; then
                     stack_lines+=("$lines")
@@ -406,7 +407,7 @@ _hop_pick() {
                     prompt="${sel:t}/ > "
                 fi
                 ;;
-            left|btab)
+            left)
                 if (( ${#stack_lines} )); then
                     lines="${stack_lines[-1]}"
                     prompt="${stack_prompt[-1]}"
@@ -414,14 +415,7 @@ _hop_pick() {
                     shift -p stack_prompt
                 fi
                 ;;
-            ctrl-s)
-                # Signal upward; hop() owns config mutation.
-                print -r -- "$sel"
-                return 2
-                ;;
             ctrl-t)
-                # Toggle browse/search — the caller owns mode switching.
-                print -r -- "$sel"
                 return 3
                 ;;
             *)                         # Enter
@@ -436,7 +430,7 @@ _hop_pick() {
 # _hop_mark_favs — star bookmarked paths in `path \t display [\t kind]` lines
 #
 # The children listing knows nothing about favorites, so without this the
-# browse view gives no feedback when Ctrl-S stars an item — the change only
+# browse view gives no feedback when Settings stars an item — the change only
 # became visible on the next full `hop` run.
 # ---------------------------------------------------------------------------
 _hop_mark_favs() {
@@ -455,28 +449,19 @@ _hop_mark_favs() {
 # ---------------------------------------------------------------------------
 # _hop_browse — descend-mode picker loop rooted at $1; prints the chosen path
 #
-# Same exit-2 toggle protocol as the search branch: Ctrl-S toggles the
-# highlighted item's favorite status and reopens the picker.
+# This is navigation-only. Favorite changes live in the Settings flow below,
+# so normal browsing never has a hidden destructive key binding.
 # ---------------------------------------------------------------------------
 _hop_browse() {
     emulate -L zsh
-    local base="$1" kids sel rc_pick
-    while true; do
-        kids="$(_hop_children "$base" | _hop_mark_favs)"
-        if [[ -z "$kids" ]]; then
-            print -u2 "hop: ${base:t} has no subdirectories"
-            return 1
-        fi
-        sel="$(print -r -- "$kids" | _hop_pick '' "${base:t}/ > ")"
-        rc_pick=$?
-        if (( rc_pick == 0 )); then
-            print -r -- "$sel"
-            return 0
-        fi
-        (( rc_pick == 1 )) && return 1
-        (( rc_pick != 2 )) && return $rc_pick
-        _hop_toggle_fav "$sel"
-    done
+    local base="$1" kids sel
+    kids="$(_hop_children "$base" | _hop_mark_favs)"
+    if [[ -z "$kids" ]]; then
+        print -u2 "hop: ${base:t} has no subdirectories"
+        return 1
+    fi
+    sel="$(print -r -- "$kids" | _hop_pick '' "${base:t}/ > ")" || return $?
+    print -r -- "$sel"
 }
 
 # ---------------------------------------------------------------------------
@@ -493,6 +478,114 @@ _hop_toggle_fav() {
 }
 
 # ---------------------------------------------------------------------------
+# _hop_fav_set_depth — update one bookmark's depth, retaining its alias.
+# ---------------------------------------------------------------------------
+_hop_fav_set_depth() {
+    emulate -L zsh
+    local target="$1" depth="$2" rc="${3:-$HOPRC}" line stripped saved_path rawpath alias comment tmpf
+    local -a out
+    [[ "$depth" == <-> ]] || return 1
+    [[ -r "$rc" && -w "$rc" ]] || return 1
+
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        stripped="${line%%#*}"
+        comment="${line#${stripped}}"
+        rawpath=""
+        if [[ "$stripped" =~ '^[[:space:]]*([^[:space:]]+)[[:space:]]+(.*[^[:space:]])[[:space:]]+depth=[^[:space:]]+[[:space:]]*$' ]]; then
+            alias="$match[1]"
+            saved_path="$match[2]"
+            rawpath="$saved_path"
+        elif [[ "$stripped" =~ '^[[:space:]]*([^[:space:]]+)[[:space:]]+(.*[^[:space:]])[[:space:]]*$' ]]; then
+            alias="$match[1]"
+            saved_path="$match[2]"
+            rawpath="$saved_path"
+        fi
+        if [[ -n "$rawpath" ]]; then
+            [[ "$saved_path" == "~" ]] && saved_path="$HOME"
+            [[ "$saved_path" == "~/"* ]] && saved_path="$HOME/${saved_path#\~/}"
+            if [[ "$saved_path" == "$target" ]]; then
+                out+=("$alias"$'\t'"$rawpath depth=$depth${comment:+ }$comment")
+                continue
+            fi
+        fi
+        out+=("$line")
+    done < "$rc"
+    tmpf="$rc.hoptmp$$"
+    print -rl -- "${out[@]}" > "$tmpf"
+    cat "$tmpf" > "$rc" && rm -f "$tmpf"
+}
+
+# ---------------------------------------------------------------------------
+# _hop_edit_favorite — choose a saved folder's search depth or remove it.
+# ---------------------------------------------------------------------------
+_hop_edit_favorite() {
+    emulate -L zsh
+    local target="$1" alias depth choice
+    alias="$(_hop_parse 2>/dev/null | awk -F'\t' -v p="$target" '$2==p {print $1; exit}')"
+    depth="$(_hop_parse 2>/dev/null | awk -F'\t' -v p="$target" '$2==p {print $4; exit}')"
+    while true; do
+        choice="$(printf '%s\t%s\n' \
+            '__hop_depth_0__' 'Search depth: 0' \
+            '__hop_depth_1__' 'Search depth: 1' \
+            '__hop_depth_2__' 'Search depth: 2' \
+            '__hop_depth_3__' 'Search depth: 3' \
+            '__hop_depth_4__' 'Search depth: 4' \
+            '__hop_depth_5__' 'Search depth: 5' \
+            '__hop_depth_6__' 'Search depth: 6' \
+            '__hop_remove__' "Remove $alias" | _hop_pick '' "folder settings (current: $depth) > " 'Enter choose   Esc back')" || return 1
+        case "$choice" in
+            __hop_depth_*) _hop_fav_set_depth "$target" "${${choice##*depth_}%%__}"; return $? ;;
+            __hop_remove__) _hop_fav_remove "$target"; return $? ;;
+        esac
+    done
+}
+
+# ---------------------------------------------------------------------------
+# _hop_settings — the visible home for adding/removing folders and depth.
+# ---------------------------------------------------------------------------
+_hop_settings() {
+    emulate -L zsh
+    local base="$1" records choice target
+    while true; do
+        choice="$(printf '%s\t%s\n' \
+            '__hop_add__' 'Add more folders' \
+            '__hop_saved__' 'Saved folders & search depth' | _hop_pick '' 'settings > ' 'Enter choose   Esc return')" || return 1
+        case "$choice" in
+            __hop_add__) _hop_manage_favorites "$base" || true ;;
+            __hop_saved__)
+                records="$(_hop_parse)" || return 1
+                [[ -z "$records" ]] && continue
+                target="$(print -r -- "$records" | awk -F'\t' 'BEGIN{OFS="\t"} {print $2, "★ " $1 "   depth=" $4}' | _hop_pick '' 'saved folders > ' 'Enter edit folder   Esc back')" || continue
+                _hop_edit_favorite "$target" || true
+                ;;
+        esac
+    done
+}
+
+# ---------------------------------------------------------------------------
+# _hop_manage_favorites — browse the filesystem and add/remove bookmarks.
+# Enter deliberately changes the highlighted item's saved state. Keeping this
+# operation in a visible Settings flow makes normal search and browsing safe.
+# ---------------------------------------------------------------------------
+_hop_manage_favorites() {
+    emulate -L zsh
+    local base="$1" kids sel
+    while true; do
+        kids="$(_hop_children "$base" | _hop_mark_favs)"
+        if [[ -z "$kids" ]]; then
+            print -u2 "hop: ${base:t} has no folders to add"
+            return 1
+        fi
+        sel="$(print -r -- "$kids" | _hop_pick '' "settings > " 'Enter add/remove favorite   → descend   ← up   Esc return')"
+        case $? in
+            0) _hop_toggle_fav "$sel" ;;
+            1) return 1 ;;
+            *) return $? ;;
+        esac
+    done
+}
+
+# ---------------------------------------------------------------------------
 # _hop_seed_rc — write a commented starter file. Does NOT scan the disk.
 # ---------------------------------------------------------------------------
 _hop_seed_rc() {
@@ -506,7 +599,7 @@ _hop_seed_rc() {
 # code    ~/Code
 # notes   ~/Documents/Notes
 EOF
-    print -u2 "hop: created $HOPRC — ★ favorites with Ctrl-S, or edit with: hop -e"
+    print -u2 "hop: created $HOPRC — use Settings / Add more folders, or edit with: hop -e"
     return 0
 }
 
@@ -524,17 +617,16 @@ hop() {
             print -r -- "       hop <text>          pick, pre-filtered by <text>"
             print -r -- "       hop <alias>         jump straight there (exact alias only)"
             print -r -- "       hop <alias>/        open the picker INSIDE that bookmark"
-            print -r -- "       hop -b | --browse [path]  browse from path (default: here); ★ as you go"
-            print -r -- "       hop -f | --favorites manage favorites: Enter jumps, Ctrl-S removes"
+            print -r -- "       hop -b | --browse [path]  browse from path (default: here)"
+            print -r -- "       hop -f | --favorites jump from saved folders only"
             print -r -- "       hop -l | --list     list bookmarks"
             print -r -- "       hop -e | --edit     edit $HOPRC"
             print -r -- "       hop -v | --version  print version"
             print -r -- ""
-            print -r -- "in the picker:  Enter hop   →/Tab descend   ←/S-Tab up   ^S favorite/unfavorite"
-            print -r -- "                ^T toggles between search and browse — star anything, anywhere"
+            print -r -- "in the picker:  Enter hop   → descend   ← up"
+            print -r -- "                Ctrl-T Settings / Add more folders"
             print -r -- ""
-            print -r -- "first run: with no bookmarks, hop browses from the current directory —"
-            print -r -- "Ctrl-S there creates your first bookmark"
+            print -r -- "first run: Settings / Add more folders opens at the current directory"
             return 0
             ;;
         -v|--version)
@@ -563,29 +655,15 @@ hop() {
 
     if [[ "$1" == "-f" || "$1" == "--favorites" ]]; then
         if [[ -z "$records" ]]; then
-            print -u2 "hop: no favorites yet — run hop and press Ctrl-S on anything"
+            print -u2 "hop: no favorites yet — run hop and choose Settings / Add more folders"
             return 1
         fi
-        local rc_pick
-        while true; do
-            # Forcing depth=0 makes _hop_index emit each bookmark and walk
-            # nothing beneath it: the favorites list, nothing else.
-            target="$(print -r -- "$records" \
-                | awk 'BEGIN{FS=OFS="\t"} {$4=0; print}' \
-                | _hop_index | _hop_rank | _hop_format \
-                | _hop_pick '' 'favorites > ')"
-            rc_pick=$?
-            (( rc_pick == 0 )) && break
-            (( rc_pick == 1 || rc_pick == 3 )) && return 1
-            (( rc_pick != 2 )) && return $rc_pick
-            _hop_toggle_fav "$target"
-            records="$(_hop_parse)" || return 1
-            if [[ -z "$records" ]]; then
-                print -u2 "hop: favorites list is now empty"
-                return 0
-            fi
-            target=''
-        done
+        # Forcing depth=0 makes _hop_index emit each bookmark and walk
+        # nothing beneath it: the favorites list, nothing else.
+        target="$(print -r -- "$records" \
+            | awk 'BEGIN{FS=OFS="\t"} {$4=0; print}' \
+            | _hop_index | _hop_rank | _hop_format \
+            | _hop_pick '' 'favorites > ')" || return $?
         [[ -f "$target" ]] && target="${target:h}"
         if [[ ! -d "$target" ]]; then
             print -u2 "hop: $target no longer exists. Fix it with: hop -e"
@@ -595,40 +673,28 @@ hop() {
         return $?
     fi
 
-    # Explicit browse mode: hop -b [path]. Enter jumps; Ctrl-T drops into
-    # search over the favorites; Esc cancels.
+    # Explicit browse mode: hop -b [path]. Enter jumps; Esc cancels.
     if [[ "$arg" == "-b" || "$arg" == "--browse" ]]; then
-        local bbase="${2:-$PWD}" rc_b
+        local bbase="${2:-$PWD}"
         arg=''
         if [[ ! -d "$bbase" ]]; then
             print -u2 "hop: $bbase is not a directory"
             return 1
         fi
-        target="$(_hop_browse "$bbase")"
-        rc_b=$?
-        if (( rc_b == 3 )); then
-            records="$(_hop_parse)" || return 1
-            if [[ -z "$records" ]]; then
-                print -u2 "hop: no favorites yet — ★ some with Ctrl-S first"
-                return 1
-            fi
-            target=''
-        elif (( rc_b != 0 )); then
-            return $(( rc_b == 1 ? 1 : rc_b ))
-        fi
+        target="$(_hop_browse "$bbase")" || return $?
     fi
 
     # First run: nothing bookmarked yet. Browse from the current directory
-    # instead of erroring into a config file — Ctrl-S on anything creates the
-    # first bookmark, no hand-editing required.
+    # instead of erroring into a config file — Settings creates the first
+    # bookmark, no hand-editing required.
     if [[ -z "$records" ]]; then
-        print -u2 "hop: no bookmarks yet — browsing from $PWD (★ with Ctrl-S, Enter to jump)"
+        print -u2 "hop: no bookmarks yet — Settings / Add more folders opens at $PWD"
         local rc_boot
-        target="$(_hop_browse "$PWD")"
+        target="$(_hop_settings "$PWD")"
         rc_boot=$?
         arg=''
         if (( rc_boot != 0 )); then
-            # Esc after starring things means "done curating" — fall through
+            # Esc after saving things means "done curating" — fall through
             # to the search picker over the new favorites instead of forcing
             # a quit-and-rerun. Esc with nothing starred stays a plain cancel.
             records="$(_hop_parse)" || return 1
@@ -640,7 +706,7 @@ hop() {
 
     # A trailing slash means "open the picker INSIDE this bookmark" rather than
     # jumping to it. Without it an exact alias jumps instantly, leaving no
-    # picker to press Tab in.
+    # picker to navigate in.
     if [[ -n "$arg" && "$arg" == */ ]]; then
         descend=1
         arg="${arg%/}"
@@ -656,44 +722,25 @@ hop() {
             print -u2 "hop: $target no longer exists. Fix it with: hop -e"
             return 1
         fi
-        local rc_d
-        target="$(_hop_browse "$target")"
-        rc_d=$?
-        (( rc_d == 3 )) && rc_d=1     # no search context to toggle into
-        (( rc_d != 0 )) && return $rc_d
+        target="$(_hop_browse "$target")" || return $?
     elif [[ -z "$target" ]]; then
         # No exact hit (or no argument): search the whole index, seeded with
-        # the argument. Exit 2 means "toggle this favorite and come back", so
-        # loop until the user selects or cancels.
+        # the argument. Ctrl-T opens the single Settings flow for bookmarks.
         local rc_pick
         while true; do
             target="$(print -r -- "$records" | _hop_index | _hop_rank | _hop_format | _hop_pick "$arg")"
             rc_pick=$?
 
+            if (( rc_pick == 3 )); then
+                _hop_settings "$PWD" || true
+                records="$(_hop_parse)" || return 1
+                target=''
+                arg=''
+                continue
+            fi
             (( rc_pick == 0 )) && break
             (( rc_pick == 1 )) && return 1        # cancelled
-
-            if (( rc_pick == 3 )); then
-                # Ctrl-T: flip to browse mode at the current directory. Star
-                # freely there; Esc or Ctrl-T returns here with the index
-                # rebuilt over the new favorites.
-                target="$(_hop_browse "$PWD")"
-                rc_pick=$?
-                (( rc_pick == 0 )) && break
-                if (( rc_pick == 1 || rc_pick == 3 )); then
-                    records="$(_hop_parse)" || return 1
-                    target=''
-                    continue
-                fi
-                return $rc_pick
-            fi
-
-            (( rc_pick != 2 )) && return $rc_pick # fzf missing, etc.
-
-            # rc_pick == 2: toggle the favorite, rebuild, reopen.
-            _hop_toggle_fav "$target"
-            records="$(_hop_parse)" || return 1
-            target=''
+            (( rc_pick != 0 )) && return $rc_pick
         done
     fi
 

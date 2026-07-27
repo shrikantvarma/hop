@@ -72,8 +72,8 @@ git clone https://github.com/shrikantvarma/hop.git \
 ## First run
 
 With no bookmarks yet, `hop` simply opens the picker in your current
-directory. Browse with `→`/`←`, press `Ctrl-S` on anything to make it your
-first bookmark — no config editing required.
+directory. Press `Ctrl-T` for Settings / Add more folders, then browse with `→`/`←` and
+press `Enter` to save a folder — no config editing required.
 
 ## Bookmarks
 
@@ -100,8 +100,8 @@ hop                # search everything in your bookmarked trees
 hop goals          # jump to the best match for "goals"
 hop notes          # exact alias -> jump immediately, no picker
 hop notes/         # open the picker INSIDE ~/Documents/Notes
-hop -b [path]      # browse from a path (default: here), starring as you go
-hop -f             # manage favorites: Enter jumps, Ctrl-S removes
+hop -b [path]      # browse from a path (default: here)
+hop -f             # jump from saved folders only
 hop -l             # list bookmarks
 hop -e             # edit ~/.hoprc
 hop -h             # help
@@ -115,10 +115,9 @@ the full path, so typing a real directory name finds it.
 | Key | Action |
 | --- | --- |
 | `Enter` | cd to the highlighted directory |
-| `→` or `Tab` | descend into it |
-| `←` or `Shift-Tab` | back out one level |
-| `Ctrl-S` | favorite / unfavorite the highlighted item (label: `^S favorite/unfavorite`) |
-| `Ctrl-T` | toggle between search and browse — reach folders outside your favorites |
+| `→` | descend into it |
+| `←` | back out one level |
+| `Ctrl-T` | Settings / Add more folders: add/remove saved folders and adjust search depth |
 | `Ctrl-F` / `Ctrl-B` | move the cursor within the query |
 | `Esc` | cancel, shell stays put |
 
@@ -146,18 +145,21 @@ search for.
 
 ### Growing the list
 
-Search only sees your favorites and what lies beneath them — that is the
-point. To star something *outside* those trees, press `Ctrl-T`: the picker
-flips into browse mode at your current directory, where `→`/`←` walk the real
-filesystem with no index at all. Star freely, then `Ctrl-T` or `Esc` returns
-to search with the new favorites live. `hop -b [path]` enters browse mode
-directly.
+Search only sees your saved folders and what lies beneath them — that is the
+point. Press `Ctrl-T` in the main picker for Settings / Add more folders, then browse from
+your current directory and add or remove folders. The same Settings menu lists
+saved folders with their current `depth=N`, where you can change a folder's
+search depth (`0` through `6`) or remove it. The selected folder's current depth is also shown
+in its settings prompt.
+Changes are live when you return to search. `hop -b [path]` remains available
+when you only want to browse.
 
 ### Favorites
 
-Everything in `~/.hoprc` is a favorite: it shows `★` and ranks above every
-indexed result. Press `Ctrl-S` in the picker to add or remove one. `hop` writes
-the change to `~/.hoprc` and leaves your comments and formatting alone.
+Everything in `~/.hoprc` is a saved folder: it shows `★` and ranks above every
+indexed result. Use `Ctrl-T` for Settings / Add more folders to add or remove one, or to
+choose its search depth. `hop` writes the change to `~/.hoprc` and preserves
+comments and formatting on untouched entries.
 
 ## Configuration
 

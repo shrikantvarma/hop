@@ -437,45 +437,59 @@ _hop_fav_remove "$tmp/Other" "$perm"
 check "remove preserves file permissions" \
       "600" "$(stat -f '%Lp' "$perm" 2>/dev/null || stat -c '%a' "$perm")"
 
-# --- ctrl-s toggle wiring through hop() (stubbed picker) -------------------
+# --- Settings wiring through hop() (stubbed picker) ------------------------
 print ""
-print "hop toggle wiring"
+print "hop settings wiring"
 
 mkdir -p "$tmp/TogRoot/sub"
 
 # The stub runs inside hop()'s own command substitution, so shell-variable
 # state cannot escape it — call-counting must live on the filesystem.
-check "ctrl-s in the search picker adds a favorite and reopens" \
+check "Ctrl-T opens Settings / Add more folders and adds a favorite" \
       "1" "$(
         togrc="$tmp/togrc1"; printf 'root\t%s\tdepth=1\n' "$tmp/TogRoot" > "$togrc"
-        HOPRC="$togrc"; flag="$tmp/togflag1"; rm -f "$flag"
-        _hop_pick() { print -r -- "$tmp/TogRoot/sub"; [[ -e "$flag" ]] && return 0; : > "$flag"; return 2 }
+        HOPRC="$togrc"; flag="$tmp/settingsflag1"; rm -f "$flag"
+        _hop_pick() {
+            if [[ ! -e "$flag" ]]; then : > "$flag"; cat > /dev/null; return 3
+            elif [[ ! -e "$flag.add" ]]; then : > "$flag.add"; cat > /dev/null; print -r -- __hop_add__; return 0
+            elif [[ ! -e "$flag.folder" ]]; then : > "$flag.folder"; cat > /dev/null; print -r -- "$tmp/TogRoot/sub"; return 0
+            fi
+            cat > /dev/null; return 1
+        }
         hop >/dev/null 2>&1
         _hop_parse "$togrc" 2>/dev/null | grep -c "	$tmp/TogRoot/sub	"
       )"
 
-check "ctrl-s in descend mode (hop alias/) also toggles" \
+check "Settings can change a favorite's search depth" \
       "1" "$(
         togrc="$tmp/togrc2"; printf 'root\t%s\tdepth=1\n' "$tmp/TogRoot" > "$togrc"
-        HOPRC="$togrc"; flag="$tmp/togflag2"; rm -f "$flag"
-        _hop_pick() { print -r -- "$tmp/TogRoot/sub"; [[ -e "$flag" ]] && return 0; : > "$flag"; return 2 }
-        hop root/ >/dev/null 2>&1
-        _hop_parse "$togrc" 2>/dev/null | grep -c "	$tmp/TogRoot/sub	"
-      )"
-
-check "ctrl-t from search opens browse and returning refreshes the index" \
-      "1" "$(
-        togrc="$tmp/togrc13"; printf 'root\t%s\tdepth=1\n' "$tmp/TogRoot" > "$togrc"
-        HOPRC="$togrc"; c1="$tmp/tf13a" c2="$tmp/tf13b" c3="$tmp/tf13c"; seen="$tmp/togseen13"; rm -f "$c1" "$c2" "$c3" "$seen"
+        HOPRC="$togrc"; c1="$tmp/sf2a" c2="$tmp/sf2b" c3="$tmp/sf2c" c4="$tmp/sf2d"; seen="$tmp/sf2seen"; rm -f "$c1" "$c2" "$c3" "$c4" "$seen"
         _hop_pick() {
-            if   [[ ! -e "$c1" ]]; then : > "$c1"; cat > /dev/null; print -r -- x; return 3        # search: ^T
-            elif [[ ! -e "$c2" ]]; then : > "$c2"; cat > /dev/null; print -r -- "$tmp/TogRoot/other"; return 2   # browse: star
-            elif [[ ! -e "$c3" ]]; then : > "$c3"; cat > /dev/null; return 1                        # browse: Esc
+            if   [[ ! -e "$c1" ]]; then : > "$c1"; cat > /dev/null; return 3
+            elif [[ ! -e "$c2" ]]; then : > "$c2"; cat > /dev/null; print -r -- __hop_saved__; return 0
+            elif [[ ! -e "$c3" ]]; then : > "$c3"; cat > "$seen"; print -r -- "$tmp/TogRoot"; return 0
+            elif [[ ! -e "$c4" ]]; then : > "$c4"; cat > /dev/null; print -r -- __hop_depth_6__; return 0
             fi
-            cat > "$seen"; return 1                                                                 # search again
+            cat > /dev/null; return 1
         }
         cd "$tmp/TogRoot" && hop >/dev/null 2>&1
-        grep -c '★ other' "$seen"
+        grep -q '★ root   depth=1' "$seen" && _hop_parse "$togrc" | awk -F'\t' '$1=="root" {print $4}' | grep -c '^6$'
+      )"
+
+check "Settings can remove a saved folder" \
+      "0" "$(
+        togrc="$tmp/togrc3"; printf 'root\t%s\tdepth=1\n' "$tmp/TogRoot" > "$togrc"
+        HOPRC="$togrc"; c1="$tmp/sf3a" c2="$tmp/sf3b" c3="$tmp/sf3c" c4="$tmp/sf3d"; rm -f "$c1" "$c2" "$c3" "$c4"
+        _hop_pick() {
+            if   [[ ! -e "$c1" ]]; then : > "$c1"; cat > /dev/null; return 3
+            elif [[ ! -e "$c2" ]]; then : > "$c2"; cat > /dev/null; print -r -- __hop_saved__; return 0
+            elif [[ ! -e "$c3" ]]; then : > "$c3"; cat > /dev/null; print -r -- "$tmp/TogRoot"; return 0
+            elif [[ ! -e "$c4" ]]; then : > "$c4"; cat > /dev/null; print -r -- __hop_remove__; return 0
+            fi
+            cat > /dev/null; return 1
+        }
+        cd "$tmp/TogRoot" && hop >/dev/null 2>&1
+        _hop_parse "$togrc" 2>/dev/null | grep -c .
       )"
 
 check "hop -b <path> browses that path" \
@@ -499,20 +513,6 @@ check "HOP_DEFAULT_DEPTH overrides the fallback depth" \
         _hop_parse "$tmp/ddrc" | cut -f4
       )"
 
-check "bootstrap Esc after starring falls through to search" \
-      "1" "$(
-        togrc="$tmp/togrc11"; : > "$togrc"
-        HOPRC="$togrc"; f1="$tmp/bf1" f2="$tmp/bf2"; seen="$tmp/bootseen"; rm -f "$f1" "$f2" "$seen"
-        _hop_pick() {
-            if [[ ! -e "$f1" ]]; then : > "$f1"; cat > /dev/null; print -r -- "$tmp/TogRoot/sub"; return 2   # star it
-            elif [[ ! -e "$f2" ]]; then : > "$f2"; cat > /dev/null; return 1                                  # Esc browse
-            fi
-            cat > "$seen"; print -r -- "$tmp/TogRoot/sub"; return 0                                           # search view
-        }
-        cd "$tmp/TogRoot" && hop >/dev/null 2>&1
-        grep -c '★ sub' "$seen"
-      )"
-
 check "bootstrap Esc with nothing starred stays a cancel" \
       "1" "$(
         togrc="$tmp/togrc12"; : > "$togrc"
@@ -520,27 +520,6 @@ check "bootstrap Esc with nothing starred stays a cancel" \
         _hop_pick() { cat > /dev/null; return 1 }
         cd "$tmp/TogRoot" && hop >/dev/null 2>&1; print $?
       )"
-
-check "browse view stars an item as soon as it is favorited" \
-      "1" "$(
-        togrc="$tmp/togrc10"; : > "$togrc"
-        HOPRC="$togrc"; flag="$tmp/togflag10" flagb="$tmp/togflag10b"; seen="$tmp/browseseen"; rm -f "$flag" "$flagb"
-        _hop_pick() {
-            if [[ ! -e "$flag" ]]; then : > "$flag"; cat > /dev/null; print -r -- "$tmp/TogRoot/sub"; return 2   # star it
-            elif [[ ! -e "$flagb" ]]; then : > "$flagb"; cat > "$seen"; return 1    # capture reopened browse view
-            fi
-            cat > /dev/null; return 1     # post-bootstrap search view: not under test here
-        }
-        mkdir -p "$tmp/TogRoot/other"
-        cd "$tmp/TogRoot" && hop >/dev/null 2>&1
-        grep -c '★ sub/' "$seen"
-      )"
-
-check "unstarred siblings stay unstarred in the browse view" \
-      "0" "$(grep -c '★ other/' "$tmp/browseseen" 2>/dev/null)"
-
-check "unstarred sibling is still present in the browse view" \
-      "1" "$(grep -c '  other/' "$tmp/browseseen" 2>/dev/null)"
 
 check "-f shows only bookmarks, no indexed children" \
       "0" "$(
@@ -560,52 +539,11 @@ check "-f lists the bookmark itself" \
         grep -c '★ root' "$seen"
       )"
 
-check "ctrl-s in -f removes the favorite from the config" \
-      "0" "$(
-        togrc="$tmp/togrc8"; printf 'root\t%s\tdepth=2\n' "$tmp/TogRoot" > "$togrc"
-        HOPRC="$togrc"
-        _hop_pick() { print -r -- "$tmp/TogRoot"; return 2 }
-        hop -f >/dev/null 2>&1
-        _hop_parse "$togrc" 2>/dev/null | grep -c .
-      )"
-
 check "-f with no favorites exits non-zero with a hint" \
       "1" "$(
         togrc="$tmp/togrc9"; : > "$togrc"
         HOPRC="$togrc"
         hop -f >/dev/null 2>&1; print $?
-      )"
-
-check "empty config: hop browses from cwd instead of erroring" \
-      "$tmp/TogRoot/sub" "$(
-        togrc="$tmp/togrc4"; : > "$togrc"
-        HOPRC="$togrc"
-        _hop_pick() { print -r -- "$tmp/TogRoot/sub"; return 0 }
-        cd "$tmp/TogRoot" && hop >/dev/null 2>&1 && pwd
-      )"
-
-check "first ctrl-s bootstraps the config from scratch" \
-      "1" "$(
-        togrc="$tmp/togrc5"; : > "$togrc"
-        HOPRC="$togrc"; flag="$tmp/togflag5"; rm -f "$flag"
-        _hop_pick() { print -r -- "$tmp/TogRoot/sub"; [[ -e "$flag" ]] && return 0; : > "$flag"; return 2 }
-        cd "$tmp/TogRoot" && hop >/dev/null 2>&1
-        _hop_parse "$togrc" 2>/dev/null | grep -c "	$tmp/TogRoot/sub	"
-      )"
-
-check "second ctrl-s on the same item removes the favorite" \
-      "0" "$(
-        togrc="$tmp/togrc3"; printf 'root\t%s\tdepth=1\n' "$tmp/TogRoot" > "$togrc"
-        HOPRC="$togrc"; f1="$tmp/togflag3a" f2="$tmp/togflag3b"; rm -f "$f1" "$f2"
-        _hop_pick() {
-            print -r -- "$tmp/TogRoot/sub"
-            if [[ ! -e "$f1" ]]; then : > "$f1"; return 2
-            elif [[ ! -e "$f2" ]]; then : > "$f2"; return 2
-            fi
-            return 0
-        }
-        hop >/dev/null 2>&1
-        _hop_parse "$togrc" 2>/dev/null | grep -c "	$tmp/TogRoot/sub	"
       )"
 
 # --- _hop_format ----------------------------------------------------------

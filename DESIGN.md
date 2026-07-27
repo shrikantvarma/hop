@@ -85,7 +85,7 @@ legitimately contain `~` — macOS iCloud containers are named things like
 
 ## Keybindings
 
-`→`/`Tab` descend, `←`/`Shift-Tab` ascend, `Enter` accepts. Binding the arrows
+`→` descends, `←` ascends, and `Enter` accepts. Binding the arrows
 is safe because fzf aliases them to `ctrl-f`/`ctrl-b` (`forward-char` /
 `backward-char`), which remain available for moving the cursor inside the query.
 
@@ -131,5 +131,5 @@ the two cannot be fed reliably from a non-interactive harness.
 ## Deliberately out of scope
 
 Opening files, frecency/usage tracking, content search (grep inside files),
-caching, and multi-select. Bookmarks are curated (by hand or via Ctrl-S), never
+caching, and multi-select. Bookmarks are curated (by hand or via Settings), never
 auto-discovered; the action is `cd` only.
