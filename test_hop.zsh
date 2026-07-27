@@ -463,6 +463,35 @@ check "ctrl-s in descend mode (hop alias/) also toggles" \
         _hop_parse "$togrc" 2>/dev/null | grep -c "	$tmp/TogRoot/sub	"
       )"
 
+check "ctrl-t from search opens browse and returning refreshes the index" \
+      "1" "$(
+        togrc="$tmp/togrc13"; printf 'root\t%s\tdepth=1\n' "$tmp/TogRoot" > "$togrc"
+        HOPRC="$togrc"; c1="$tmp/tf13a" c2="$tmp/tf13b" c3="$tmp/tf13c"; seen="$tmp/togseen13"; rm -f "$c1" "$c2" "$c3" "$seen"
+        _hop_pick() {
+            if   [[ ! -e "$c1" ]]; then : > "$c1"; cat > /dev/null; print -r -- x; return 3        # search: ^T
+            elif [[ ! -e "$c2" ]]; then : > "$c2"; cat > /dev/null; print -r -- "$tmp/TogRoot/other"; return 2   # browse: star
+            elif [[ ! -e "$c3" ]]; then : > "$c3"; cat > /dev/null; return 1                        # browse: Esc
+            fi
+            cat > "$seen"; return 1                                                                 # search again
+        }
+        cd "$tmp/TogRoot" && hop >/dev/null 2>&1
+        grep -c '★ other' "$seen"
+      )"
+
+check "hop -b <path> browses that path" \
+      "$tmp/TogRoot/sub" "$(
+        togrc="$tmp/togrc14"; printf 'root\t%s\tdepth=1\n' "$tmp/TogRoot" > "$togrc"
+        HOPRC="$togrc"
+        _hop_pick() { cat > /dev/null; print -r -- "$tmp/TogRoot/sub"; return 0 }
+        hop -b "$tmp/TogRoot" >/dev/null 2>&1 && pwd
+      )"
+
+check "hop -b rejects a non-directory" \
+      "1" "$(
+        HOPRC="$tmp/togrc14"
+        hop -b /nonexistent_dir_xyz >/dev/null 2>&1; print $?
+      )"
+
 check "HOP_DEFAULT_DEPTH overrides the fallback depth" \
       "5" "$(
         HOP_DEFAULT_DEPTH=5

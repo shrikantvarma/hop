@@ -100,6 +100,7 @@ hop                # search everything in your bookmarked trees
 hop goals          # jump to the best match for "goals"
 hop notes          # exact alias -> jump immediately, no picker
 hop notes/         # open the picker INSIDE ~/Documents/Notes
+hop -b [path]      # browse from a path (default: here), starring as you go
 hop -f             # manage favorites: Enter jumps, Ctrl-S removes
 hop -l             # list bookmarks
 hop -e             # edit ~/.hoprc
@@ -117,6 +118,7 @@ the full path, so typing a real directory name finds it.
 | `→` or `Tab` | descend into it |
 | `←` or `Shift-Tab` | back out one level |
 | `Ctrl-S` | favorite / unfavorite the highlighted item (label: `^S favorite/unfavorite`) |
+| `Ctrl-T` | toggle between search and browse — reach folders outside your favorites |
 | `Ctrl-F` / `Ctrl-B` | move the cursor within the query |
 | `Esc` | cancel, shell stays put |
 
@@ -141,6 +143,15 @@ notes     ~/Notes      depth=3    # searched deeply
 `depth=0` is for large trees you only ever `cd` into — without it, thousands of
 `node_modules` and plugin files crowd out the handful of notes you actually
 search for.
+
+### Growing the list
+
+Search only sees your favorites and what lies beneath them — that is the
+point. To star something *outside* those trees, press `Ctrl-T`: the picker
+flips into browse mode at your current directory, where `→`/`←` walk the real
+filesystem with no index at all. Star freely, then `Ctrl-T` or `Esc` returns
+to search with the new favorites live. `hop -b [path]` enters browse mode
+directly.
 
 ### Favorites
 
@@ -195,7 +206,7 @@ survive intact.
 zsh test_hop.zsh
 ```
 
-113 assertions covering config parsing, indexing, ranking, alias derivation,
+116 assertions covering config parsing, indexing, ranking, alias derivation,
 config rewriting (byte-for-byte round-trip), and key handling — including
 listing through symlinks. The fzf picker itself is interactive and is
 verified by hand.

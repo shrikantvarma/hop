@@ -385,10 +385,10 @@ _hop_pick() {
               --reverse \
               --border \
               --prompt="$prompt" \
-              --expect=right,left,tab,btab,ctrl-s \
+              --expect=right,left,tab,btab,ctrl-s,ctrl-t \
               --preview='ls -1p {1} 2>/dev/null | head -40' \
               --preview-window='right:45%:wrap' \
-              --header='Enter hop   →/Tab descend   ←/S-Tab up   ^S favorite/unfavorite' \
+              --header='Enter hop   →/Tab descend   ←/S-Tab up   ^S favorite/unfavorite   ^T browse/search' \
               ${=HOP_FZF_OPTS})" || return 1
 
         out="$(_hop_split_expect "$out")"
@@ -418,6 +418,11 @@ _hop_pick() {
                 # Signal upward; hop() owns config mutation.
                 print -r -- "$sel"
                 return 2
+                ;;
+            ctrl-t)
+                # Toggle browse/search — the caller owns mode switching.
+                print -r -- "$sel"
+                return 3
                 ;;
             *)                         # Enter
                 print -r -- "$sel"
@@ -519,12 +524,14 @@ hop() {
             print -r -- "       hop <text>          pick, pre-filtered by <text>"
             print -r -- "       hop <alias>         jump straight there (exact alias only)"
             print -r -- "       hop <alias>/        open the picker INSIDE that bookmark"
+            print -r -- "       hop -b | --browse [path]  browse from path (default: here); ★ as you go"
             print -r -- "       hop -f | --favorites manage favorites: Enter jumps, Ctrl-S removes"
             print -r -- "       hop -l | --list     list bookmarks"
             print -r -- "       hop -e | --edit     edit $HOPRC"
             print -r -- "       hop -v | --version  print version"
             print -r -- ""
             print -r -- "in the picker:  Enter hop   →/Tab descend   ←/S-Tab up   ^S favorite/unfavorite"
+            print -r -- "                ^T toggles between search and browse — star anything, anywhere"
             print -r -- ""
             print -r -- "first run: with no bookmarks, hop browses from the current directory —"
             print -r -- "Ctrl-S there creates your first bookmark"
@@ -569,7 +576,7 @@ hop() {
                 | _hop_pick '' 'favorites > ')"
             rc_pick=$?
             (( rc_pick == 0 )) && break
-            (( rc_pick == 1 )) && return 1
+            (( rc_pick == 1 || rc_pick == 3 )) && return 1
             (( rc_pick != 2 )) && return $rc_pick
             _hop_toggle_fav "$target"
             records="$(_hop_parse)" || return 1
@@ -586,6 +593,29 @@ hop() {
         fi
         cd "$target"
         return $?
+    fi
+
+    # Explicit browse mode: hop -b [path]. Enter jumps; Ctrl-T drops into
+    # search over the favorites; Esc cancels.
+    if [[ "$arg" == "-b" || "$arg" == "--browse" ]]; then
+        local bbase="${2:-$PWD}" rc_b
+        arg=''
+        if [[ ! -d "$bbase" ]]; then
+            print -u2 "hop: $bbase is not a directory"
+            return 1
+        fi
+        target="$(_hop_browse "$bbase")"
+        rc_b=$?
+        if (( rc_b == 3 )); then
+            records="$(_hop_parse)" || return 1
+            if [[ -z "$records" ]]; then
+                print -u2 "hop: no favorites yet — ★ some with Ctrl-S first"
+                return 1
+            fi
+            target=''
+        elif (( rc_b != 0 )); then
+            return $(( rc_b == 1 ? 1 : rc_b ))
+        fi
     fi
 
     # First run: nothing bookmarked yet. Browse from the current directory
@@ -626,7 +656,11 @@ hop() {
             print -u2 "hop: $target no longer exists. Fix it with: hop -e"
             return 1
         fi
-        target="$(_hop_browse "$target")" || return $?
+        local rc_d
+        target="$(_hop_browse "$target")"
+        rc_d=$?
+        (( rc_d == 3 )) && rc_d=1     # no search context to toggle into
+        (( rc_d != 0 )) && return $rc_d
     elif [[ -z "$target" ]]; then
         # No exact hit (or no argument): search the whole index, seeded with
         # the argument. Exit 2 means "toggle this favorite and come back", so
@@ -638,6 +672,22 @@ hop() {
 
             (( rc_pick == 0 )) && break
             (( rc_pick == 1 )) && return 1        # cancelled
+
+            if (( rc_pick == 3 )); then
+                # Ctrl-T: flip to browse mode at the current directory. Star
+                # freely there; Esc or Ctrl-T returns here with the index
+                # rebuilt over the new favorites.
+                target="$(_hop_browse "$PWD")"
+                rc_pick=$?
+                (( rc_pick == 0 )) && break
+                if (( rc_pick == 1 || rc_pick == 3 )); then
+                    records="$(_hop_parse)" || return 1
+                    target=''
+                    continue
+                fi
+                return $rc_pick
+            fi
+
             (( rc_pick != 2 )) && return $rc_pick # fzf missing, etc.
 
             # rc_pick == 2: toggle the favorite, rebuild, reopen.
