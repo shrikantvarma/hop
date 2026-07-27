@@ -1,6 +1,9 @@
 # hop
 
-**Bookmark a few directories. Search everything inside them.**
+**A curated, keyboard-first directory navigator for zsh and fzf.**
+
+Save a few useful folders, search inside their trees, and navigate with the
+arrow keys—without filling your shell history with every directory you visit.
 
 Bookmark the directories you care about, fuzzy-find them, then press `→` to step
 *into* one and keep going. Bookmark the trunk, browse the branches.
@@ -27,7 +30,7 @@ $ hop
 ```
 
 Bookmarking every leaf directory doesn't scale, and history-based jumpers can't
-reach a directory you've never visited. `hop` bookmarks the few directories worth
+reach a directory you've never visited. `hop` saves the few directories worth
 naming and lets you navigate down from there.
 
 > **Demo:** _(recording to be added)_
@@ -69,11 +72,21 @@ git clone https://github.com/shrikantvarma/hop.git \
 ```
 </details>
 
+## Quick start
+
+```sh
+hop
+# Press Ctrl-T → Add more folders → use → / ← to browse → Enter to save.
+```
+
+Saved folders rank first in future searches. Use `Ctrl-T` again any time to
+add or remove folders or change their search depth.
+
 ## First run
 
 With no bookmarks yet, `hop` simply opens the picker in your current
-directory. Press `Ctrl-T` for Settings / Add more folders, then browse with `→`/`←` and
-press `Enter` to save a folder — no config editing required.
+directory. Press `Ctrl-T` for Settings / Add more folders, browse with `→`/`←`,
+then press `Enter` to save a folder—no config editing required.
 
 ## Bookmarks
 
@@ -145,21 +158,20 @@ search for.
 
 ### Growing the list
 
-Search only sees your saved folders and what lies beneath them — that is the
-point. Press `Ctrl-T` in the main picker for Settings / Add more folders, then browse from
-your current directory and add or remove folders. The same Settings menu lists
-saved folders with their current `depth=N`, where you can change a folder's
-search depth (`0` through `6`) or remove it. The selected folder's current depth is also shown
-in its settings prompt.
-Changes are live when you return to search. `hop -b [path]` remains available
-when you only want to browse.
+Search only sees your saved folders and what lies beneath them—that is the
+point. Press `Ctrl-T` in the main picker for Settings / Add more folders, then
+browse from your current directory and add or remove folders. The same Settings
+menu lists saved folders with their current `depth=N`, where you can change a
+folder's search depth (`0` through `6`) or remove it. The selected folder's
+current depth is also shown in its settings prompt. Changes are live when you
+return to search. `hop -b [path]` remains available when you only want to browse.
 
 ### Favorites
 
 Everything in `~/.hoprc` is a saved folder: it shows `★` and ranks above every
-indexed result. Use `Ctrl-T` for Settings / Add more folders to add or remove one, or to
-choose its search depth. `hop` writes the change to `~/.hoprc` and preserves
-comments and formatting on untouched entries.
+indexed result. Use `Ctrl-T` for Settings / Add more folders to add or remove
+one, or to choose its search depth. `hop` writes the change to `~/.hoprc` and
+preserves comments and formatting on untouched entries.
 
 ## Configuration
 
@@ -208,7 +220,7 @@ survive intact.
 zsh test_hop.zsh
 ```
 
-116 assertions covering config parsing, indexing, ranking, alias derivation,
+108 assertions covering config parsing, indexing, ranking, alias derivation,
 config rewriting (byte-for-byte round-trip), and key handling — including
 listing through symlinks. The fzf picker itself is interactive and is
 verified by hand.
