@@ -220,6 +220,76 @@ _hop_alias_for() {
 }
 
 # ---------------------------------------------------------------------------
+# _hop_fav_add — append a bookmark to the config file
+#
+# Idempotent: adding an already-bookmarked path does nothing.
+# ---------------------------------------------------------------------------
+_hop_fav_add() {
+    emulate -L zsh
+
+    local target="$1" rc="${2:-$HOPRC}"
+    local -a taken
+
+    [[ -e "$rc" ]] || : > "$rc"
+    if [[ ! -w "$rc" ]]; then
+        print -u2 "hop: cannot write $rc"
+        return 1
+    fi
+
+    # Already bookmarked?
+    if _hop_parse "$rc" 2>/dev/null | cut -f2 | grep -qxF -- "$target"; then
+        return 0
+    fi
+
+    taken=(${(f)"$(_hop_parse "$rc" 2>/dev/null | cut -f1)"})
+    printf '%s\t%s\n' "$(_hop_alias_for "$target" "${taken[@]}")" "$target" >> "$rc"
+}
+
+# ---------------------------------------------------------------------------
+# _hop_fav_remove — drop the entry whose expanded path matches
+#
+# Rewrites line by line rather than filtering with sed, so comments, blank
+# lines, spacing, and depth= tokens on other entries all survive untouched.
+# ---------------------------------------------------------------------------
+_hop_fav_remove() {
+    emulate -L zsh
+
+    local target="$1" rc="${2:-$HOPRC}"
+    local line stripped p tmpf
+    local -a keep
+
+    [[ -r "$rc" ]] || return 1
+    if [[ ! -w "$rc" ]]; then
+        print -u2 "hop: cannot write $rc"
+        return 1
+    fi
+
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        stripped="${line%%'#'*}"
+        p=""
+        if [[ "$stripped" =~ '^[[:space:]]*[^[:space:]]+[[:space:]]+(.*[^[:space:]])[[:space:]]+depth=[^[:space:]]+[[:space:]]*$' ]]; then
+            p="$match[1]"
+        elif [[ "$stripped" =~ '^[[:space:]]*[^[:space:]]+[[:space:]]+(.*[^[:space:]])[[:space:]]*$' ]]; then
+            p="$match[1]"
+        fi
+
+        if [[ -n "$p" ]]; then
+            if [[ "$p" == "~" ]]; then
+                p="$HOME"
+            elif [[ "$p" == "~/"* ]]; then
+                p="$HOME/${p#\~/}"
+            fi
+            [[ "$p" == "$target" ]] && continue     # drop this line
+        fi
+
+        keep+=("$line")
+    done < "$rc"
+
+    tmpf="$rc.hoptmp$$"
+    print -rl -- "${keep[@]}" > "$tmpf" && mv "$tmpf" "$rc"
+}
+
+# ---------------------------------------------------------------------------
 # _hop_split_expect — parse `fzf --expect` output into `key \t path`
 #
 # fzf emits the pressed key on line 1 (EMPTY for plain Enter) and the selected

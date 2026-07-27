@@ -343,6 +343,58 @@ check "double collision gets -3" \
 check "purely non-alphanumeric name falls back to 'dir'" \
       "dir" "$(_hop_alias_for '/a/b/---')"
 
+# --- favorites round-trip -------------------------------------------------
+print ""
+print "_hop_fav_add / _hop_fav_remove"
+
+frc="$tmp/favrc"
+mkdir -p "$tmp/FavTarget" "$tmp/Other"
+cat > "$frc" <<EOF
+# leading comment
+code   $tmp/Other    depth=1
+
+# a section comment
+other  $tmp/Other
+EOF
+orig="$(<$frc)"
+
+_hop_fav_add "$tmp/FavTarget" "$frc"
+
+check "add appends the new path" \
+      "1" "$(_hop_parse "$frc" 2>/dev/null | grep -c "	$tmp/FavTarget	")"
+
+check "add derives the alias from the basename" \
+      "favtarget" "$(_hop_parse "$frc" 2>/dev/null | awk -F'\t' -v p="$tmp/FavTarget" '$2==p{print $1}')"
+
+check "add preserves the leading comment" \
+      "1" "$(grep -c '^# leading comment' "$frc")"
+
+check "add preserves the section comment" \
+      "1" "$(grep -c '^# a section comment' "$frc")"
+
+check "add is idempotent" \
+      "1" "$(_hop_fav_add "$tmp/FavTarget" "$frc"; _hop_parse "$frc" 2>/dev/null | grep -c "	$tmp/FavTarget	")"
+
+_hop_fav_remove "$tmp/FavTarget" "$frc"
+
+check "remove drops the entry" \
+      "0" "$(_hop_parse "$frc" 2>/dev/null | grep -c "	$tmp/FavTarget	")"
+
+check "remove restores the file byte-for-byte" \
+      "$orig" "$(<$frc)"
+
+check "remove keeps other entries" \
+      "2" "$(_hop_parse "$frc" 2>/dev/null | grep -c .)"
+
+check "remove preserves the depth= token on untouched lines" \
+      "1" "$(_hop_parse "$frc" 2>/dev/null | awk -F'\t' '$1=="code"{print $4}')"
+
+check "removing an absent path is a no-op" \
+      "$orig" "$(_hop_fav_remove "$tmp/NeverAdded" "$frc"; print -r -- "$(<$frc)")"
+
+check "add to an unwritable file returns non-zero" \
+      "1" "$(chmod a-w "$frc"; _hop_fav_add "$tmp/Other2" "$frc" >/dev/null 2>&1; print $?; chmod u+w "$frc")"
+
 print ""
 print "$pass passed, $fail failed"
 (( fail == 0 ))
