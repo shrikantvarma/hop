@@ -516,7 +516,7 @@ _hop_fav_set_depth() {
 }
 
 # ---------------------------------------------------------------------------
-# _hop_edit_favorite — choose a saved folder's search depth or remove it.
+# _hop_edit_favorite — choose a saved folder's search depth or unfavorite it.
 # ---------------------------------------------------------------------------
 _hop_edit_favorite() {
     emulate -L zsh
@@ -532,7 +532,7 @@ _hop_edit_favorite() {
             '__hop_depth_4__' 'Search depth: 4' \
             '__hop_depth_5__' 'Search depth: 5' \
             '__hop_depth_6__' 'Search depth: 6' \
-            '__hop_remove__' "Remove $alias" | _hop_pick '' "folder settings (current: $depth) > " 'Enter choose   Esc back')" || return 1
+            '__hop_remove__' "Unfavorite / remove $alias" | _hop_pick '' "saved folder: $alias (depth: $depth) > " 'Enter choose   Esc back')" || return 1
         case "$choice" in
             __hop_depth_*) _hop_fav_set_depth "$target" "${${choice##*depth_}%%__}"; return $? ;;
             __hop_remove__) _hop_fav_remove "$target"; return $? ;;
@@ -555,7 +555,12 @@ _hop_settings() {
             __hop_saved__)
                 records="$(_hop_parse)" || return 1
                 [[ -z "$records" ]] && continue
-                target="$(print -r -- "$records" | awk -F'\t' 'BEGIN{OFS="\t"} {print $2, "★ " $1 "   depth=" $4}' | _hop_pick '' 'saved folders > ' 'Enter edit folder   Esc back')" || continue
+                target="$(print -r -- "$records" | awk -F'\t' -v home="$HOME" 'BEGIN{OFS="\t"} {
+                    display_path=$2
+                    if (display_path == home) display_path="~"
+                    else if (index(display_path, home "/") == 1) display_path="~" substr(display_path, length(home) + 1)
+                    print $2, "★ " $1 "   " display_path "   depth=" $4
+                }' | _hop_pick '' 'saved folders > ' 'Enter change depth or unfavorite   Esc back')" || continue
                 _hop_edit_favorite "$target" || true
                 ;;
         esac

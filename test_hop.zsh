@@ -473,7 +473,22 @@ check "Settings can change a favorite's search depth" \
             cat > /dev/null; return 1
         }
         cd "$tmp/TogRoot" && hop >/dev/null 2>&1
-        grep -q '★ root   depth=1' "$seen" && _hop_parse "$togrc" | awk -F'\t' '$1=="root" {print $4}' | grep -c '^6$'
+        grep -q "★ root   $tmp/TogRoot   depth=1" "$seen" && _hop_parse "$togrc" | awk -F'\t' '$1=="root" {print $4}' | grep -c '^6$'
+      )"
+
+check "Saved folders show the full path to distinguish duplicate names" \
+      "1" "$(
+        togrc="$tmp/togrc-path-label"; printf 'same-a\t%s\tdepth=1\nsame-b\t%s\tdepth=2\n' "$tmp/TogRoot" "$tmp/TogRoot/sub" > "$togrc"
+        HOPRC="$togrc"; c1="$tmp/sf-path-a"; c2="$tmp/sf-path-b"; c3="$tmp/sf-path-c"; seen="$tmp/sf-path-seen"; rm -f "$c1" "$c2" "$c3" "$seen"
+        _hop_pick() {
+            if [[ ! -e "$c1" ]]; then : > "$c1"; cat > /dev/null; return 3
+            elif [[ ! -e "$c2" ]]; then : > "$c2"; cat > /dev/null; print -r -- __hop_saved__; return 0
+            elif [[ ! -e "$c3" ]]; then : > "$c3"; cat > "$seen"; print -r -- "$tmp/TogRoot"; return 0
+            fi
+            cat > /dev/null; return 1
+        }
+        cd "$tmp/TogRoot" && hop >/dev/null 2>&1
+        grep -cF "$tmp/TogRoot/sub" "$seen"
       )"
 
 check "Settings can remove a saved folder" \
@@ -490,6 +505,19 @@ check "Settings can remove a saved folder" \
         }
         cd "$tmp/TogRoot" && hop >/dev/null 2>&1
         _hop_parse "$togrc" 2>/dev/null | grep -c .
+      )"
+
+check "saved-folder picker makes unfavoriting discoverable" \
+      "1" "$(
+        togrc="$tmp/togrc3-label"; printf 'root\t%s\tdepth=1\n' "$tmp/TogRoot" > "$togrc"
+        HOPRC="$togrc"; seen="$tmp/sf3-label"; rm -f "$seen"
+        _hop_pick() {
+            cat > "$seen"
+            print -r -- __hop_remove__
+            return 0
+        }
+        _hop_edit_favorite "$tmp/TogRoot" >/dev/null 2>&1
+        grep -c 'Unfavorite / remove root' "$seen"
       )"
 
 check "hop -b <path> browses that path" \
