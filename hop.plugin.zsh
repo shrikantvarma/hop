@@ -713,7 +713,11 @@ hop() {
         return $?
     fi
 
-    # Explicit browse mode: hop -b [path]. Enter jumps; Esc cancels.
+    # Explicit browse mode: hop -b [path]. Enter jumps; Esc cancels. This
+    # must run regardless of whether any bookmarks are configured yet, so
+    # it is an `elif` against the first-run bootstrap below rather than a
+    # separate `if` -- otherwise an empty/missing $HOPRC falls through into
+    # bootstrap and clobbers the target -b already resolved.
     if [[ "$arg" == "-b" || "$arg" == "--browse" ]]; then
         local bbase="${2:-$PWD}"
         arg=''
@@ -722,26 +726,25 @@ hop() {
             return 1
         fi
         target="$(_hop_browse "$bbase")" || return $?
-    fi
 
     # First run: nothing bookmarked yet. Browse from the current directory
     # instead of erroring into a config file — Settings creates the first
-    # bookmark, no hand-editing required.
-    if [[ -z "$records" ]]; then
+    # bookmark, no hand-editing required. _hop_settings never writes to
+    # stdout and only ever returns 1 (it exits solely via `|| return 1` when
+    # the picker is cancelled), so its result is always "Esc was pressed" --
+    # what happens next depends only on whether Settings saved something
+    # before that Esc.
+    elif [[ -z "$records" ]]; then
         print -u2 "hop: no bookmarks yet — Settings / Add more folders opens at $PWD"
-        local rc_boot
-        target="$(_hop_settings "$PWD")"
-        rc_boot=$?
+        _hop_settings "$PWD"
         arg=''
-        if (( rc_boot != 0 )); then
-            # Esc after saving things means "done curating" — fall through
-            # to the search picker over the new favorites instead of forcing
-            # a quit-and-rerun. Esc with nothing starred stays a plain cancel.
-            records="$(_hop_parse)" || return 1
-            [[ -z "$records" ]] && return $rc_boot
-            print -u2 "hop: favorites saved — searching them now (Esc again to quit)"
-            target=''
-        fi
+        # Esc after saving things means "done curating" — fall through to
+        # the search picker over the new favorites instead of forcing a
+        # quit-and-rerun. Esc with nothing starred stays a plain cancel.
+        records="$(_hop_parse)" || return 1
+        [[ -z "$records" ]] && return 1
+        print -u2 "hop: favorites saved — searching them now (Esc again to quit)"
+        target=''
     fi
 
     # A trailing slash means "open the picker INSIDE this bookmark" rather than

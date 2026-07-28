@@ -538,6 +538,34 @@ check "hop -b rejects a non-directory" \
         hop -b /nonexistent_dir_xyz >/dev/null 2>&1; print $?
       )"
 
+# Regression guard: an empty/missing ~/.hoprc must not let the first-run
+# bootstrap block steal the target that -b already resolved. The stub's
+# first call serves _hop_browse (from -b); if hop() wrongly falls through
+# into the bootstrap block afterwards, the second call serves _hop_settings
+# and immediately cancels (Esc), so a pre-fix run returns 1 instead of
+# cd-ing -- this must NOT hang even when the bug is present.
+check "hop -b browses even with an empty hoprc (no bootstrap steal)" \
+      "$tmp/TogRoot/sub" "$(
+        togrc="$tmp/togrc-b-empty"; : > "$togrc"
+        HOPRC="$togrc"; flag="$tmp/bempty-flag"; rm -f "$flag"
+        _hop_pick() {
+            if [[ ! -e "$flag" ]]; then : > "$flag"; cat > /dev/null; print -r -- "$tmp/TogRoot/sub"; return 0; fi
+            cat > /dev/null; return 1
+        }
+        hop -b "$tmp/TogRoot" >/dev/null 2>&1 && pwd
+      )"
+
+check "hop -b browses even with a missing hoprc (no bootstrap steal)" \
+      "$tmp/TogRoot/sub" "$(
+        togrc="$tmp/togrc-b-missing"; rm -f "$togrc"
+        HOPRC="$togrc"; flag="$tmp/bmissing-flag"; rm -f "$flag"
+        _hop_pick() {
+            if [[ ! -e "$flag" ]]; then : > "$flag"; cat > /dev/null; print -r -- "$tmp/TogRoot/sub"; return 0; fi
+            cat > /dev/null; return 1
+        }
+        hop -b "$tmp/TogRoot" >/dev/null 2>&1 && pwd
+      )"
+
 check "HOP_DEFAULT_DEPTH overrides the fallback depth" \
       "5" "$(
         HOP_DEFAULT_DEPTH=5
