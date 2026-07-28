@@ -443,6 +443,10 @@ _hop_pick() {
             ctrl-t)
                 return 3
                 ;;
+            '')                        # Enter
+                print -r -- "$sel"
+                return 0
+                ;;
             "$extra_key")
                 print -r -- "$sel"
                 return 4

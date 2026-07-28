@@ -601,6 +601,37 @@ check "ctrl-s is parsed by _hop_split_expect" \
       $'ctrl-s\t/Users/x/Code' \
       "$(_hop_split_expect $'ctrl-s\n/Users/x/Code\t★ code')"
 
+# --- _hop_pick (Enter key handling) ---------------------------------------
+print ""
+print "_hop_pick"
+
+# fzf is stubbed per-check inside the command substitution, so the stub
+# never leaks into the outer shell or other checks.
+
+check "Enter with no extra_key returns 0 and prints the selection" \
+      $'0\t/tmp/foo' \
+      "$(
+        fzf() { cat > /dev/null; printf '%s\n' '' $'/tmp/foo\tfoo'; }
+        out="$(print -r -- $'/tmp/foo\tfoo' | _hop_pick)"; rc=$?
+        printf '%s\t%s' "$rc" "$out"
+      )"
+
+check "Enter still returns 0 when an extra_key is configured" \
+      $'0\t/tmp/foo' \
+      "$(
+        fzf() { cat > /dev/null; printf '%s\n' '' $'/tmp/foo\tfoo'; }
+        out="$(print -r -- $'/tmp/foo\tfoo' | _hop_pick '' 'prompt > ' 'header' 'ctrl-d')"; rc=$?
+        printf '%s\t%s' "$rc" "$out"
+      )"
+
+check "pressing the configured extra_key still returns 4" \
+      $'4\t/tmp/foo' \
+      "$(
+        fzf() { cat > /dev/null; printf '%s\n' 'ctrl-d' $'/tmp/foo\tfoo'; }
+        out="$(print -r -- $'/tmp/foo\tfoo' | _hop_pick '' 'prompt > ' 'header' 'ctrl-d')"; rc=$?
+        printf '%s\t%s' "$rc" "$out"
+      )"
+
 # --- hop orchestration (non-interactive paths) ----------------------------
 print ""
 print "hop"
