@@ -2,9 +2,10 @@
 
 **A small, fast way to move between the folders you care about.**
 
-`hop` is a zsh and [fzf](https://github.com/junegunn/fzf) plugin. Save a few
-useful folders, search inside them, and move through their contents without
-memorising paths or filling your history with every directory you visit.
+`hop` is a zsh and [fzf](https://github.com/junegunn/fzf) plugin for jumping
+between directories. Bookmark a few useful folders, fuzzy-search inside them,
+and browse their contents interactively — without memorising paths or filling
+your history with every directory you visit.
 
 > ▶ **[Watch the full terminal demo (MOV, 1.4 MB)](https://github.com/shrikantvarma/hop/raw/refs/heads/main/assets/hop.mov)**
 >
@@ -144,6 +145,29 @@ For oh-my-zsh, clone the repository into its custom plugins directory, then add
 git clone https://github.com/shrikantvarma/hop.git \
   ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/hop
 ```
+
+## How hop compares to zoxide, z, and autojump
+
+Tools like [zoxide](https://github.com/ajeetdsouza/zoxide),
+[z](https://github.com/rupa/z), and autojump are *frecency* jumpers: they watch
+every `cd`, score directories by how often and how recently you visit them, and
+jump to the best match. That works well, but the ranking shifts as your habits
+do, and one-off deep dives pollute the database.
+
+`hop` is deliberate instead of statistical. You bookmark a handful of folders
+once; searches cover exactly those folders and their contents to a depth you
+set. Results are the same every time, nothing tracks your shell history, and
+`→`/`←` let you browse when you don't remember a name at all.
+
+|  | hop | zoxide / z / autojump | fzf `Alt-C` |
+| --- | --- | --- | --- |
+| Jump source | folders you saved | learned from `cd` history | everything under the current directory |
+| Ranking | fixed, saved folders first | frecency score | none |
+| Browse with preview | yes (`→`/`←`) | no | no |
+| Setup beyond install | save a few folders | none | none |
+
+They compose fine: many people keep a frecency jumper for "everywhere" and use
+`hop` for the dozen folders they actually live in.
 
 ## Development
 
