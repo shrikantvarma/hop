@@ -120,9 +120,9 @@ check "non-numeric depth falls back to 2" \
 check "non-numeric depth warns with line number" \
       "1" "$(print -r -- "$(<$tmp/derr)" | grep -c 'depthrc:5')"
 
-# A favorited FILE is a valid bookmark — Ctrl-S can star a file, and Enter
-# then lands in its parent. Status must not be "missing" just because the
-# path is not a directory.
+# A favorited FILE is a valid bookmark — Settings / Add more folders can
+# star a file, and Enter on it then lands in its parent. Status must not be
+# "missing" just because the path is not a directory.
 touch "$dtmp/note.md"
 frc0="$tmp/filerc"
 print -r -- "note	$dtmp/note.md" > "$frc0"
@@ -197,14 +197,6 @@ print "_hop_split_expect"
 check "Enter yields empty key and the path" \
       $'\t/Users/x/Code' \
       "$(_hop_split_expect $'\n/Users/x/Code\tcode    /Users/x/Code')"
-
-check "tab yields key=tab and the path" \
-      $'tab\t/Users/x/Code' \
-      "$(_hop_split_expect $'tab\n/Users/x/Code\tcode    /Users/x/Code')"
-
-check "btab yields key=btab and the path" \
-      $'btab\t/Users/x/Code' \
-      "$(_hop_split_expect $'btab\n/Users/x/Code\tcode    /Users/x/Code')"
 
 check "right arrow yields key=right and the path" \
       $'right\t/Users/x/Code' \
@@ -633,10 +625,6 @@ check "path stays in field 1" \
 check "output is exactly two fields" \
       "2" "$(print -r -- "$frecs" | _hop_format | head -1 | awk -F'\t' '{print NF}')"
 
-check "ctrl-s is parsed by _hop_split_expect" \
-      $'ctrl-s\t/Users/x/Code' \
-      "$(_hop_split_expect $'ctrl-s\n/Users/x/Code\t★ code')"
-
 # --- _hop_pick (Enter key handling) ---------------------------------------
 print ""
 print "_hop_pick"
@@ -696,6 +684,35 @@ check "ctrl-t is a harmless no-op (not a cancel) when with_settings is off" \
         printf '%s\t%s' "$rc" "$out"
       )"
 
+# Descend/back stack: → replaces the list in place with real children (via
+# the real _hop_children), ← must restore the EXACT prior list rather than
+# just "a" prior list -- proven by selecting an item that only exists at the
+# top level once back out.
+pkroot="$tmp/pick_stack"
+mkdir -p "$pkroot/ChildA/Grandchild" "$pkroot/ChildB"
+pklines="$pkroot/ChildA	ChildA/	dir
+$pkroot/ChildB	ChildB/	dir"
+
+check "right descends into children, left restores the original list, Enter selects from it" \
+      $'0\t'"$pkroot/ChildB" \
+      "$(
+        step="$tmp/pickstack-step"; rm -f "$step.1" "$step.2"
+        fzf() {
+            cat > /dev/null
+            if [[ ! -e "$step.1" ]]; then
+                : > "$step.1"
+                printf '%s\n' 'right' "$pkroot/ChildA"$'\t''ChildA/'$'\t''dir'
+            elif [[ ! -e "$step.2" ]]; then
+                : > "$step.2"
+                printf '%s\n' 'left' "$pkroot/ChildA/Grandchild"$'\t''Grandchild/'$'\t''dir'
+            else
+                printf '%s\n' '' "$pkroot/ChildB"$'\t''ChildB/'$'\t''dir'
+            fi
+        }
+        out="$(print -r -- "$pklines" | _hop_pick)"; rc=$?
+        printf '%s\t%s' "$rc" "$out"
+      )"
+
 # --- hop orchestration (non-interactive paths) ----------------------------
 print ""
 print "hop"
@@ -717,11 +734,16 @@ check "exact alias still jumps without a picker" \
       "$tmp/OrchRoot" "$(HOPRC="$hrc" hop orch >/dev/null 2>&1 && pwd)"
 cd "$tmp"
 
+check "hop <alias>/ opens the picker INSIDE that bookmark instead of jumping" \
+      "$tmp/OrchRoot/sub" "$(
+        HOPRC="$hrc"
+        _hop_pick() { cat > /dev/null; print -r -- "$tmp/OrchRoot/sub"; return 0 }
+        hop orch/ >/dev/null 2>&1 && pwd
+      )"
+cd "$tmp"
+
 check "-v reports a 0.2 version" \
       "1" "$(HOPRC="$hrc" hop -v | grep -c '0\.2')"
-
-check "help mentions the favorite key" \
-      "0" "$(HOPRC="$hrc" hop -h | grep -qi 'favorite'; print $?)"
 
 print ""
 print "$pass passed, $fail failed"
