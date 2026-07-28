@@ -6,9 +6,10 @@
 useful folders, search inside them, and move through their contents without
 memorising paths or filling your history with every directory you visit.
 
-![hop demo: saved folders, deep search, and a fast jump](assets/hop-demo.gif)
-
-For the full walkthrough, [watch or download the demo video (MOV, 1.4 MB)](assets/hop.mov).
+> ▶ **[Watch the full terminal demo (MOV, 1.4 MB)](https://github.com/shrikantvarma/hop/raw/refs/heads/main/assets/hop.mov)**
+>
+> On GitHub, MOV files open or download as a separate file rather than playing
+> inline in the README.
 
 ## Install
 
