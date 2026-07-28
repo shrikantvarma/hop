@@ -28,53 +28,94 @@ fi
 : ${HOP_DEFAULT_DEPTH:=2}
 
 # ---------------------------------------------------------------------------
+# _hop_parse_line — parse one raw rc line into its fields
+#
+# Shared by every function that reads rc-file lines (_hop_parse,
+# _hop_fav_remove, _hop_fav_set_depth), so the comment-strip, the two-branch
+# depth-or-no-depth regex, and the leading-~ expansion live in exactly one
+# place instead of three copies that can drift out of sync.
+#
+#   in  : $1 -- the raw line, exactly as read from the file
+#   out : globals (not `local` -- these are this helper's return values,
+#         same convention as zsh's own $match/$MATCH/$REPLY):
+#           _hop_pl_name     -- the alias
+#           _hop_pl_rawpath  -- the path exactly as written (~ intact)
+#           _hop_pl_path     -- the path with a leading ~ expanded to $HOME
+#           _hop_pl_depth    -- the raw depth= token, or "" if absent
+#           _hop_pl_stripped -- the line with its trailing #comment removed;
+#                                callers that need to preserve the comment
+#                                when rewriting a line can recover it via
+#                                ${line#$_hop_pl_stripped}
+#
+# Returns 1 (fields left blank, only _hop_pl_stripped is meaningful) for a
+# blank/comment-only line or one with no parseable path.
+# ---------------------------------------------------------------------------
+_hop_parse_line() {
+    emulate -L zsh
+    local line="$1"
+    _hop_pl_stripped="${line%%'#'*}"                  # strip comments
+    _hop_pl_name='' _hop_pl_rawpath='' _hop_pl_path='' _hop_pl_depth=''
+
+    [[ "$_hop_pl_stripped" == *[^[:space:]]* ]] || return 1   # blank / whitespace only
+
+    # Try the depth= form first. A keyed token is used rather than a bare
+    # trailing number because paths may contain spaces: "~/Notes/Chapter 3"
+    # would otherwise parse as path "~/Notes/Chapter" with depth 3.
+    if [[ "$_hop_pl_stripped" =~ '^[[:space:]]*([^[:space:]]+)[[:space:]]+(.*[^[:space:]])[[:space:]]+depth=([^[:space:]]+)[[:space:]]*$' ]]; then
+        _hop_pl_name="$match[1]"
+        _hop_pl_rawpath="$match[2]"
+        _hop_pl_depth="$match[3]"
+    elif [[ "$_hop_pl_stripped" =~ '^[[:space:]]*([^[:space:]]+)[[:space:]]+(.*[^[:space:]])[[:space:]]*$' ]]; then
+        _hop_pl_name="$match[1]"
+        _hop_pl_rawpath="$match[2]"
+    else
+        return 1        # malformed: no path
+    fi
+
+    # Expand a leading ~ ONLY, anchored to position 0. A global substitution
+    # would corrupt paths that legitimately contain ~, such as macOS iCloud
+    # container names like `iCloud~md~obsidian`.
+    _hop_pl_path="$_hop_pl_rawpath"
+    if [[ "$_hop_pl_path" == "~" ]]; then
+        _hop_pl_path="$HOME"
+    elif [[ "$_hop_pl_path" == "~/"* ]]; then
+        _hop_pl_path="$HOME/${_hop_pl_path#\~/}"
+    fi
+}
+
+# ---------------------------------------------------------------------------
 # _hop_parse — pure text transform, no side effects
 #
 # Reads $HOPRC (or $1), writes one record per valid entry:
-#     alias \t path \t (ok|missing)
+#     alias \t path \t (ok|missing) \t depth
 # Malformed lines are skipped and reported to stderr with a line number.
 # ---------------------------------------------------------------------------
 _hop_parse() {
     emulate -L zsh
 
     local rc="${1:-$HOPRC}"
-    local line name p depth lineno=0   # `p`, not `path` (tied PATH array)
+    local line depth lineno=0
 
     [[ -r "$rc" ]] || { print -u2 "hop: cannot read $rc"; return 1 }
 
     while IFS= read -r line || [[ -n "$line" ]]; do
         (( lineno++ ))
 
-        line="${line%%'#'*}"                          # strip comments
-        [[ "$line" == *[^[:space:]]* ]] || continue   # blank / whitespace only
-
-        # Try the depth= form first. A keyed token is used rather than a bare
-        # trailing number because paths may contain spaces: "~/Notes/Chapter 3"
-        # would otherwise parse as path "~/Notes/Chapter" with depth 3.
-        if [[ "$line" =~ '^[[:space:]]*([^[:space:]]+)[[:space:]]+(.*[^[:space:]])[[:space:]]+depth=([^[:space:]]+)[[:space:]]*$' ]]; then
-            name="$match[1]"
-            p="$match[2]"
-            depth="$match[3]"
-            if [[ ! "$depth" =~ '^[0-9]+$' ]]; then
-                print -u2 "hop: $rc:$lineno: depth=$depth is not a number -- using $HOP_DEFAULT_DEPTH"
-                depth=$HOP_DEFAULT_DEPTH
-            fi
-        elif [[ "$line" =~ '^[[:space:]]*([^[:space:]]+)[[:space:]]+(.*[^[:space:]])[[:space:]]*$' ]]; then
-            name="$match[1]"
-            p="$match[2]"
-            depth=$HOP_DEFAULT_DEPTH
-        else
-            print -u2 "hop: $rc:$lineno: malformed (no path) -- skipped"
+        if ! _hop_parse_line "$line"; then
+            # A blank/comment-only line strips to nothing (or whitespace) and
+            # is skipped silently; anything else that failed to parse had
+            # real content with no usable path, and is worth a warning.
+            [[ "$_hop_pl_stripped" == *[^[:space:]]* ]] \
+                && print -u2 "hop: $rc:$lineno: malformed (no path) -- skipped"
             continue
         fi
 
-        # Expand a leading ~ ONLY, anchored to position 0. A global substitution
-        # would corrupt paths that legitimately contain ~, such as macOS iCloud
-        # container names like `iCloud~md~obsidian`.
-        if [[ "$p" == "~" ]]; then
-            p="$HOME"
-        elif [[ "$p" == "~/"* ]]; then
-            p="$HOME/${p#\~/}"
+        depth="$_hop_pl_depth"
+        if [[ -z "$depth" ]]; then
+            depth=$HOP_DEFAULT_DEPTH
+        elif [[ "$depth" != <-> ]]; then
+            print -u2 "hop: $rc:$lineno: depth=$depth is not a number -- using $HOP_DEFAULT_DEPTH"
+            depth=$HOP_DEFAULT_DEPTH
         fi
 
         # printf, not `print -r`: -r suppresses escape interpretation, which
@@ -82,10 +123,10 @@ _hop_parse() {
         # -e, not -d: a bookmark may be a FILE. Settings can save a file, and
         # Enter on it lands in its parent directory. Testing -d here would
         # mark every favorited file "missing" and drop it from the index.
-        if [[ -e "$p" ]]; then
-            printf '%s\t%s\t%s\t%s\n' "$name" "$p" "ok" "$depth"
+        if [[ -e "$_hop_pl_path" ]]; then
+            printf '%s\t%s\t%s\t%s\n' "$_hop_pl_name" "$_hop_pl_path" "ok" "$depth"
         else
-            printf '%s\t%s\t%s\t%s\n' "$name" "$p" "missing" "$depth"
+            printf '%s\t%s\t%s\t%s\n' "$_hop_pl_name" "$_hop_pl_path" "missing" "$depth"
         fi
     done < "$rc"
 }
@@ -303,7 +344,7 @@ _hop_fav_remove() {
     emulate -L zsh
 
     local target="$1" rc="${2:-$HOPRC}"
-    local line stripped p tmpf
+    local line tmpf
     local -a keep
 
     [[ -r "$rc" ]] || return 1
@@ -313,23 +354,9 @@ _hop_fav_remove() {
     fi
 
     while IFS= read -r line || [[ -n "$line" ]]; do
-        stripped="${line%%'#'*}"
-        p=""
-        if [[ "$stripped" =~ '^[[:space:]]*[^[:space:]]+[[:space:]]+(.*[^[:space:]])[[:space:]]+depth=[^[:space:]]+[[:space:]]*$' ]]; then
-            p="$match[1]"
-        elif [[ "$stripped" =~ '^[[:space:]]*[^[:space:]]+[[:space:]]+(.*[^[:space:]])[[:space:]]*$' ]]; then
-            p="$match[1]"
+        if _hop_parse_line "$line" && [[ "$_hop_pl_path" == "$target" ]]; then
+            continue     # drop this line
         fi
-
-        if [[ -n "$p" ]]; then
-            if [[ "$p" == "~" ]]; then
-                p="$HOME"
-            elif [[ "$p" == "~/"* ]]; then
-                p="$HOME/${p#\~/}"
-            fi
-            [[ "$p" == "$target" ]] && continue     # drop this line
-        fi
-
         keep+=("$line")
     done < "$rc"
 
@@ -515,31 +542,16 @@ _hop_toggle_fav() {
 # ---------------------------------------------------------------------------
 _hop_fav_set_depth() {
     emulate -L zsh
-    local target="$1" depth="$2" rc="${3:-$HOPRC}" line stripped saved_path rawpath alias comment tmpf
+    local target="$1" depth="$2" rc="${3:-$HOPRC}" line comment tmpf
     local -a out
     [[ "$depth" == <-> ]] || return 1
     [[ -r "$rc" && -w "$rc" ]] || return 1
 
     while IFS= read -r line || [[ -n "$line" ]]; do
-        stripped="${line%%#*}"
-        comment="${line#${stripped}}"
-        rawpath=""
-        if [[ "$stripped" =~ '^[[:space:]]*([^[:space:]]+)[[:space:]]+(.*[^[:space:]])[[:space:]]+depth=[^[:space:]]+[[:space:]]*$' ]]; then
-            alias="$match[1]"
-            saved_path="$match[2]"
-            rawpath="$saved_path"
-        elif [[ "$stripped" =~ '^[[:space:]]*([^[:space:]]+)[[:space:]]+(.*[^[:space:]])[[:space:]]*$' ]]; then
-            alias="$match[1]"
-            saved_path="$match[2]"
-            rawpath="$saved_path"
-        fi
-        if [[ -n "$rawpath" ]]; then
-            [[ "$saved_path" == "~" ]] && saved_path="$HOME"
-            [[ "$saved_path" == "~/"* ]] && saved_path="$HOME/${saved_path#\~/}"
-            if [[ "$saved_path" == "$target" ]]; then
-                out+=("$alias"$'\t'"$rawpath depth=$depth${comment:+ }$comment")
-                continue
-            fi
+        if _hop_parse_line "$line" && [[ "$_hop_pl_path" == "$target" ]]; then
+            comment="${line#$_hop_pl_stripped}"
+            out+=("$_hop_pl_name"$'\t'"$_hop_pl_rawpath depth=$depth${comment:+ }$comment")
+            continue
         fi
         out+=("$line")
     done < "$rc"
