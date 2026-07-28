@@ -556,7 +556,11 @@ _hop_fav_set_depth() {
         out+=("$line")
     done < "$rc"
     tmpf="$rc.hoptmp$$"
-    print -rl -- "${out[@]}" > "$tmpf"
+    if (( ${#out} )); then
+        print -rl -- "${out[@]}" > "$tmpf"
+    else
+        : > "$tmpf"        # print -rl with an empty array emits one newline
+    fi
     cat "$tmpf" > "$rc" && rm -f "$tmpf"
 }
 

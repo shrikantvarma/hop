@@ -440,6 +440,14 @@ _hop_fav_remove "$tmp/Other" "$perm"
 check "remove preserves file permissions" \
       "600" "$(stat -f '%Lp' "$perm" 2>/dev/null || stat -c '%a' "$perm")"
 
+# _hop_fav_set_depth needs the same empty-array guard as _hop_fav_remove:
+# rewriting a genuinely empty rc file must not turn it into one blank line.
+edrc="$tmp/emptydepthrc"
+: > "$edrc"
+_hop_fav_set_depth "$tmp/Other" 3 "$edrc"
+check "set-depth on an empty rc file leaves it empty, not one blank line" \
+      "0" "$(wc -c < "$edrc" | tr -d ' ')"
+
 # --- Settings wiring through hop() (stubbed picker) ------------------------
 print ""
 print "hop settings wiring"
