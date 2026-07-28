@@ -419,6 +419,15 @@ _hop_format() {
 # Binding the arrows is safe because fzf aliases them to ctrl-f / ctrl-b
 # (forward-char / backward-char), which remain available for moving the cursor
 # inside the query.
+#
+# Return-code protocol -- every caller relies on these exact values:
+#   0    a selection was made (Enter); the path is on stdout
+#   1    cancelled (Esc, or fzf itself exited non-zero)
+#   3    Ctrl-T pressed with with_settings enabled -- caller should open
+#        Settings; nothing is printed
+#   4    the configured extra_key ($4) was pressed; the highlighted path is
+#        on stdout, same as a plain Enter
+#   127  fzf is not installed
 # ---------------------------------------------------------------------------
 _hop_pick() {
     emulate -L zsh
