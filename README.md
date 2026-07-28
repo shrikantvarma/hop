@@ -6,6 +6,10 @@
 useful folders, search inside them, and move through their contents without
 memorising paths or filling your history with every directory you visit.
 
+![hop demo: saved folders, deep search, and a fast jump](assets/hop-demo.gif)
+
+For the full walkthrough, [watch or download the demo video (MOV, 1.4 MB)](assets/hop.mov).
+
 ## Install
 
 You need [zsh](https://www.zsh.org/) and [fzf](https://github.com/junegunn/fzf).
