@@ -668,6 +668,34 @@ check "pressing the configured extra_key still returns 4" \
         printf '%s\t%s' "$rc" "$out"
       )"
 
+# Ctrl-T must only ever open Settings (return 3) where the caller actually
+# handles it -- signalled by with_settings ($5). Everywhere else it must be
+# a harmless no-op rather than a silent cancel.
+check "ctrl-t returns 3 when with_settings is enabled" \
+      $'3\t' \
+      "$(
+        fzf() { cat > /dev/null; printf '%s\n' 'ctrl-t' $'/tmp/foo\tfoo'; }
+        out="$(print -r -- $'/tmp/foo\tfoo' | _hop_pick '' '' '' '' 1)"; rc=$?
+        printf '%s\t%s' "$rc" "$out"
+      )"
+
+check "ctrl-t is a harmless no-op (not a cancel) when with_settings is off" \
+      $'0\t/tmp/foo' \
+      "$(
+        seen="$tmp/ctrlt-seen"; rm -f "$seen"
+        fzf() {
+            cat > /dev/null
+            if [[ ! -e "$seen" ]]; then
+                : > "$seen"
+                printf '%s\n' 'ctrl-t' $'/tmp/foo\tfoo'
+            else
+                printf '%s\n' '' $'/tmp/foo\tfoo'
+            fi
+        }
+        out="$(print -r -- $'/tmp/foo\tfoo' | _hop_pick)"; rc=$?
+        printf '%s\t%s' "$rc" "$out"
+      )"
+
 # --- hop orchestration (non-interactive paths) ----------------------------
 print ""
 print "hop"

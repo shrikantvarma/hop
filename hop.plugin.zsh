@@ -404,6 +404,12 @@ _hop_format() {
 # _hop_pick — consume `path \t display` lines on stdin, emit one chosen path
 #
 #   $1  initial query   $2  initial prompt   $3  header   $4 extra expected key
+#   $5  with_settings -- truthy only at the one call site whose caller
+#       actually handles a return of 3 by opening Settings. Everywhere else
+#       Ctrl-T must stay unbound: binding it and showing the "^T Settings"
+#       hint on a picker that cannot honour it either gets swallowed by that
+#       caller's own `|| return 1`/`continue` (a silent, confusing cancel) or
+#       just propagates return 3 out to a caller with no Settings handling.
 #
 # Loops so the list can be replaced in place:
 #   →             descend into the highlighted directory
@@ -420,7 +426,8 @@ _hop_pick() {
     local query="$1"
     local lines out key sel kids prompt="${2:-hop > }"
     local header="${3:-Enter hop   → descend   ← up}" extra_key="${4:-}"
-    local -a stack_lines stack_prompt
+    local with_settings="${5:-0}"
+    local -a stack_lines stack_prompt expect
 
     if ! command -v fzf >/dev/null 2>&1; then
         print -u2 "hop: fzf is not installed -- see https://github.com/junegunn/fzf"
@@ -428,6 +435,11 @@ _hop_pick() {
     fi
 
     lines="$(cat)"
+
+    expect=(right left)
+    (( with_settings )) && expect+=(ctrl-t)
+    [[ -n "$extra_key" ]] && expect+=("$extra_key")
+    (( with_settings )) && header="${header}   ^T Settings / Add more folders"
 
     while true; do
         out="$(print -r -- "$lines" | fzf \
@@ -438,10 +450,10 @@ _hop_pick() {
               --reverse \
               --border \
               --prompt="$prompt" \
-              --expect="right,left,ctrl-t${extra_key:+,$extra_key}" \
+              --expect="${(j:,:)expect}" \
               --preview='ls -1p {1} 2>/dev/null | head -40' \
               --preview-window='right:45%:wrap' \
-              --header="${header}   ^T Settings / Add more folders" \
+              --header="$header" \
               ${=HOP_FZF_OPTS})" || return 1
 
         out="$(_hop_split_expect "$out")"
@@ -468,6 +480,7 @@ _hop_pick() {
                 fi
                 ;;
             ctrl-t)
+                (( with_settings )) || continue
                 return 3
                 ;;
             '')                        # Enter
@@ -784,10 +797,12 @@ hop() {
         target="$(_hop_browse "$target")" || return $?
     elif [[ -z "$target" ]]; then
         # No exact hit (or no argument): search the whole index, seeded with
-        # the argument. Ctrl-T opens the single Settings flow for bookmarks.
+        # the argument. Ctrl-T opens the single Settings flow for bookmarks --
+        # this is the only _hop_pick call site that passes with_settings=1,
+        # since it is the only caller that handles a return of 3.
         local rc_pick
         while true; do
-            target="$(print -r -- "$records" | _hop_index | _hop_rank | _hop_format | _hop_pick "$arg")"
+            target="$(print -r -- "$records" | _hop_index | _hop_rank | _hop_format | _hop_pick "$arg" '' '' '' 1)"
             rc_pick=$?
 
             if (( rc_pick == 3 )); then
