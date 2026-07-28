@@ -151,9 +151,10 @@ _hop_children() {
 
     # Directories first, then files — the (-/N) qualifier resolves symlinks
     # before the type test, (-.N) does the same for plain files.
+    # zsh's .* glob never yields "." or ".." (unlike a literal shell glob in
+    # other shells), so no extra guard is needed to skip them here.
     for child in "$parent"/*(-/N) "$parent"/.*(-/N); do
         name="${child:t}"
-        [[ "$name" == "." || "$name" == ".." ]] && continue
         (( ${_HOP_SKIP[(Ie)$name]} )) && continue
         printf '%s\t%s/\t%s\n' "$child" "$name" "dir"
     done
@@ -396,6 +397,7 @@ _hop_split_expect() {
 # Favorites get a star; everything else gets two spaces so the columns align.
 # ---------------------------------------------------------------------------
 _hop_format() {
+    emulate -L zsh
     awk -F'\t' 'BEGIN{OFS="\t"}
         { print $2, ($4 == "1" ? "★ " : "  ") $3 }'
 }
@@ -591,22 +593,24 @@ _hop_fav_set_depth() {
 # ---------------------------------------------------------------------------
 _hop_edit_favorite() {
     emulate -L zsh
-    local target="$1" alias depth choice
-    alias="$(_hop_parse 2>/dev/null | awk -F'\t' -v p="$target" '$2==p {print $1; exit}')"
-    depth="$(_hop_parse 2>/dev/null | awk -F'\t' -v p="$target" '$2==p {print $4; exit}')"
-    while true; do
-        choice="$(printf '%s\t%s\n' \
-            '__hop_depth_0__' 'Search depth: 0' \
-            '__hop_depth_1__' 'Search depth: 1' \
-            '__hop_depth_2__' 'Search depth: 2' \
-            '__hop_depth_3__' 'Search depth: 3' \
-            '__hop_depth_4__' 'Search depth: 4' \
-            '__hop_depth_5__' 'Search depth: 5' \
-            '__hop_depth_6__' 'Search depth: 6' | _hop_pick '' "saved folder: $alias (depth: $depth) > " 'Enter choose   Esc back')" || return 1
-        case "$choice" in
-            __hop_depth_*) _hop_fav_set_depth "$target" "${${choice##*depth_}%%__}"; return $? ;;
-        esac
-    done
+    local target="$1" alias depth choice records
+    # One parse, not one per field: the depth picker itself is a single
+    # choice, so there is no loop here for a second round to serve.
+    records="$(_hop_parse 2>/dev/null)"
+    alias="$(print -r -- "$records" | awk -F'\t' -v p="$target" '$2==p {print $1; exit}')"
+    depth="$(print -r -- "$records" | awk -F'\t' -v p="$target" '$2==p {print $4; exit}')"
+    choice="$(printf '%s\t%s\n' \
+        '__hop_depth_0__' 'Search depth: 0' \
+        '__hop_depth_1__' 'Search depth: 1' \
+        '__hop_depth_2__' 'Search depth: 2' \
+        '__hop_depth_3__' 'Search depth: 3' \
+        '__hop_depth_4__' 'Search depth: 4' \
+        '__hop_depth_5__' 'Search depth: 5' \
+        '__hop_depth_6__' 'Search depth: 6' | _hop_pick '' "saved folder: $alias (depth: $depth) > " 'Enter choose   Esc back')" || return 1
+    case "$choice" in
+        __hop_depth_*) _hop_fav_set_depth "$target" "${${choice##*depth_}%%__}"; return $? ;;
+        *) return 1 ;;
+    esac
 }
 
 # ---------------------------------------------------------------------------
@@ -667,6 +671,7 @@ _hop_manage_favorites() {
 # _hop_seed_rc — write a commented starter file. Does NOT scan the disk.
 # ---------------------------------------------------------------------------
 _hop_seed_rc() {
+    emulate -L zsh
     cat > "$HOPRC" <<'EOF'
 # ~/.hoprc — bookmarks for `hop`
 #
@@ -685,7 +690,8 @@ EOF
 # hop — orchestration; the only unit that calls cd
 # ---------------------------------------------------------------------------
 hop() {
-    local records target arg="$1" descend=0 kids
+    emulate -L zsh
+    local records target arg="$1" descend=0
 
     case "$1" in
         -h|--help)
@@ -842,6 +848,7 @@ hop() {
 
 # Completion: offer aliases from the config file.
 _hop_complete() {
+    emulate -L zsh
     local -a aliases
     aliases=(${(f)"$(_hop_parse 2>/dev/null | cut -f1)"})
     compadd -- $aliases
