@@ -3,12 +3,12 @@
 **A folder navigator for your terminal: discover files and folders, favorite
 the ones you care about, and control how deep each one is searched.**
 
-`hop` is a zsh and [fzf](https://github.com/junegunn/fzf) plugin. Fuzzy-search
-your favorite folders and everything inside them, or steer with the arrow keys
-when you don't remember a name — then land there with one keypress. Each
-favorite gets its own search depth, so a huge folder stays shallow while your
-projects folder is searched all the way down. No memorising paths, no mining
-your shell history.
+`hop` is a zsh and [fzf](https://github.com/junegunn/fzf) plugin for jumping
+between directories. Bookmark a few useful folders, fuzzy-search inside them,
+and browse their contents interactively — without memorising paths or filling
+your history with every directory you visit. Each favorite gets its own search
+depth, so a huge folder stays shallow while your projects folder is searched
+all the way down.
 
 > ▶ **[Watch the full terminal demo (MOV, 1.4 MB)](https://github.com/shrikantvarma/hop/raw/refs/heads/main/assets/hop.mov)**
 >
