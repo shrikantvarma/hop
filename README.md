@@ -111,6 +111,8 @@ HOPRC="$HOME/.config/hop/bookmarks"
 
 # Pass extra options to fzf.
 HOP_FZF_OPTS='--height=80% --border=rounded'
+# HOP_FZF_OPTS is word-split on whitespace, so a value with embedded spaces
+# (e.g. a --header) needs its own quoting layer, or should be left out.
 
 # Change the default for entries without depth=N.
 HOP_DEFAULT_DEPTH=2
@@ -151,7 +153,7 @@ Run the test suite with:
 zsh test_hop.zsh
 ```
 
-The suite currently has 108 checks for parsing, indexing, ranking, saved-folder
+The suite currently has 117 checks for parsing, indexing, ranking, saved-folder
 updates, symlink handling, and picker wiring.
 
 ## License
