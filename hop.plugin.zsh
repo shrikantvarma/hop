@@ -205,6 +205,9 @@ _hop_rank() {
 # _hop_alias_for — path + existing aliases -> a unique alias
 #
 #   _hop_alias_for /a/b/Daily\ Notes code notes   ->  daily-notes
+#
+# When the basename is already taken, use parent-path context before resorting
+# to a number: `/work/client/Code` becomes `client-code`, not `code-2`.
 # ---------------------------------------------------------------------------
 _hop_alias_for() {
     emulate -L zsh
@@ -216,7 +219,7 @@ _hop_alias_for() {
     # shadowing it breaks external-command lookup for the function's scope.
     local p="$1"; shift
     local -a taken=("$@")
-    local base="${p:t}" cand n
+    local base="${p:t}" cand part parent n
 
     base="${(L)base}"                       # lowercase
     base="${base//[^a-z0-9]##/-}"           # runs of non-alphanumerics -> one -
@@ -225,11 +228,33 @@ _hop_alias_for() {
     [[ -n "$base" ]] || base="dir"
 
     cand="$base"
+    (( ! ${taken[(Ie)$cand]} )) && { print -r -- "$cand"; return; }
+
+    # Grow the alias towards the filesystem root until its path context makes
+    # it unique. Do not expose a user's account name: $HOME is simply `home`.
+    parent="${p:h}"
+    while [[ "$parent" != "/" && -n "$parent" ]]; do
+        if [[ "$parent" == "$HOME" ]]; then
+            part="home"
+        else
+            part="${(L)${parent:t}}"
+            part="${part//[^a-z0-9]##/-}"
+            part="${part##-}"
+            part="${part%%-}"
+            [[ -n "$part" ]] || part="folder"
+        fi
+        cand="$part-$cand"
+        (( ! ${taken[(Ie)$cand]} )) && { print -r -- "$cand"; return; }
+        parent="${parent:h}"
+    done
+
+    # An identical ancestor chain is exceptionally rare (for example, a
+    # hand-written alias). Preserve uniqueness rather than refusing to save.
     n=2
-    while (( ${taken[(Ie)$cand]} )); do
-        cand="$base-$n"
+    while (( ${taken[(Ie)$cand-$n]} )); do
         (( n++ ))
     done
+    cand="$cand-$n"
 
     print -r -- "$cand"
 }
@@ -351,7 +376,7 @@ _hop_format() {
 # ---------------------------------------------------------------------------
 # _hop_pick — consume `path \t display` lines on stdin, emit one chosen path
 #
-#   $1  initial query   $2  initial prompt   $3  header
+#   $1  initial query   $2  initial prompt   $3  header   $4 extra expected key
 #
 # Loops so the list can be replaced in place:
 #   →             descend into the highlighted directory
@@ -367,7 +392,7 @@ _hop_pick() {
 
     local query="$1"
     local lines out key sel kids prompt="${2:-hop > }"
-    local header="${3:-Enter hop   → descend   ← up}"
+    local header="${3:-Enter hop   → descend   ← up}" extra_key="${4:-}"
     local -a stack_lines stack_prompt
 
     if ! command -v fzf >/dev/null 2>&1; then
@@ -386,7 +411,7 @@ _hop_pick() {
               --reverse \
               --border \
               --prompt="$prompt" \
-              --expect=right,left,ctrl-t \
+              --expect="right,left,ctrl-t${extra_key:+,$extra_key}" \
               --preview='ls -1p {1} 2>/dev/null | head -40' \
               --preview-window='right:45%:wrap' \
               --header="${header}   ^T Settings / Add more folders" \
@@ -417,6 +442,10 @@ _hop_pick() {
                 ;;
             ctrl-t)
                 return 3
+                ;;
+            "$extra_key")
+                print -r -- "$sel"
+                return 4
                 ;;
             *)                         # Enter
                 print -r -- "$sel"
@@ -516,7 +545,7 @@ _hop_fav_set_depth() {
 }
 
 # ---------------------------------------------------------------------------
-# _hop_edit_favorite — choose a saved folder's search depth or unfavorite it.
+# _hop_edit_favorite — choose a saved folder's search depth.
 # ---------------------------------------------------------------------------
 _hop_edit_favorite() {
     emulate -L zsh
@@ -531,11 +560,9 @@ _hop_edit_favorite() {
             '__hop_depth_3__' 'Search depth: 3' \
             '__hop_depth_4__' 'Search depth: 4' \
             '__hop_depth_5__' 'Search depth: 5' \
-            '__hop_depth_6__' 'Search depth: 6' \
-            '__hop_remove__' "Unfavorite / remove $alias" | _hop_pick '' "saved folder: $alias (depth: $depth) > " 'Enter choose   Esc back')" || return 1
+            '__hop_depth_6__' 'Search depth: 6' | _hop_pick '' "saved folder: $alias (depth: $depth) > " 'Enter choose   Esc back')" || return 1
         case "$choice" in
             __hop_depth_*) _hop_fav_set_depth "$target" "${${choice##*depth_}%%__}"; return $? ;;
-            __hop_remove__) _hop_fav_remove "$target"; return $? ;;
         esac
     done
 }
@@ -560,8 +587,12 @@ _hop_settings() {
                     if (display_path == home) display_path="~"
                     else if (index(display_path, home "/") == 1) display_path="~" substr(display_path, length(home) + 1)
                     print $2, "★ " $1 "   " display_path "   depth=" $4
-                }' | _hop_pick '' 'saved folders > ' 'Enter change depth or unfavorite   Esc back')" || continue
-                _hop_edit_favorite "$target" || true
+                }' | _hop_pick '' 'saved folders > ' 'Enter change depth   Ctrl-D unfavorite   Esc back' 'ctrl-d')"
+                case $? in
+                    0) _hop_edit_favorite "$target" || true ;;
+                    4) _hop_fav_remove "$target" || true ;;
+                    *) continue ;;
+                esac
                 ;;
         esac
     done

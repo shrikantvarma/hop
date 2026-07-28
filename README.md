@@ -78,8 +78,9 @@ Press `Ctrl-T` from the main picker to open Settings.
 - **Saved folders & search depth** shows every saved folder and its current
   path and `depth=N` value, so folders with the same name are easy to tell
   apart.
-- Select a saved folder to change its depth (`0` through `6`) or choose
-  **Unfavorite / remove** to stop saving it.
+- Select a saved folder to change its depth (`0` through `6`). Press `Ctrl-D`
+  on a highlighted folder to immediately stop saving it; the list refreshes
+  in place.
 
 Depth controls how far below a saved folder hop searches. `depth=0` includes
 only the saved folder. `depth=2`—the default—also searches two levels beneath

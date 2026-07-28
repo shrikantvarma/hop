@@ -344,11 +344,14 @@ check "leaves underscores-only names usable" \
 check "no collision means no suffix" \
       "assets" "$(_hop_alias_for /a/b/Assets code notes)"
 
-check "collision gets -2" \
-      "assets-2" "$(_hop_alias_for /a/b/Assets assets notes)"
+check "collision uses the parent folder, not a number" \
+      "b-assets" "$(_hop_alias_for /a/b/Assets assets notes)"
 
-check "double collision gets -3" \
-      "assets-3" "$(_hop_alias_for /a/b/Assets assets assets-2)"
+check "nested collision adds more path context" \
+      "a-b-assets" "$(_hop_alias_for /a/b/Assets assets b-assets)"
+
+check "a home-folder collision uses home, not the account name" \
+      "home-code" "$(_hop_alias_for "$HOME/Code" code)"
 
 check "purely non-alphanumeric name falls back to 'dir'" \
       "dir" "$(_hop_alias_for '/a/b/---')"
@@ -494,12 +497,11 @@ check "Saved folders show the full path to distinguish duplicate names" \
 check "Settings can remove a saved folder" \
       "0" "$(
         togrc="$tmp/togrc3"; printf 'root\t%s\tdepth=1\n' "$tmp/TogRoot" > "$togrc"
-        HOPRC="$togrc"; c1="$tmp/sf3a" c2="$tmp/sf3b" c3="$tmp/sf3c" c4="$tmp/sf3d"; rm -f "$c1" "$c2" "$c3" "$c4"
+        HOPRC="$togrc"; c1="$tmp/sf3a" c2="$tmp/sf3b" c3="$tmp/sf3c"; rm -f "$c1" "$c2" "$c3"
         _hop_pick() {
             if   [[ ! -e "$c1" ]]; then : > "$c1"; cat > /dev/null; return 3
             elif [[ ! -e "$c2" ]]; then : > "$c2"; cat > /dev/null; print -r -- __hop_saved__; return 0
-            elif [[ ! -e "$c3" ]]; then : > "$c3"; cat > /dev/null; print -r -- "$tmp/TogRoot"; return 0
-            elif [[ ! -e "$c4" ]]; then : > "$c4"; cat > /dev/null; print -r -- __hop_remove__; return 0
+            elif [[ ! -e "$c3" ]]; then : > "$c3"; cat > /dev/null; print -r -- "$tmp/TogRoot"; return 4
             fi
             cat > /dev/null; return 1
         }
@@ -507,17 +509,19 @@ check "Settings can remove a saved folder" \
         _hop_parse "$togrc" 2>/dev/null | grep -c .
       )"
 
-check "saved-folder picker makes unfavoriting discoverable" \
+check "Ctrl-D directly unfavorites and returns to the saved-folder list" \
       "1" "$(
-        togrc="$tmp/togrc3-label"; printf 'root\t%s\tdepth=1\n' "$tmp/TogRoot" > "$togrc"
-        HOPRC="$togrc"; seen="$tmp/sf3-label"; rm -f "$seen"
+        togrc="$tmp/togrc3-label"; printf 'root\t%s\tdepth=1\nother\t%s\tdepth=1\n' "$tmp/TogRoot" "$tmp/TogRoot/sub" > "$togrc"
+        HOPRC="$togrc"; c1="$tmp/sf3-label-a"; c2="$tmp/sf3-label-b"; c3="$tmp/sf3-label-c"; seen="$tmp/sf3-label"; rm -f "$c1" "$c2" "$c3" "$seen"
         _hop_pick() {
-            cat > "$seen"
-            print -r -- __hop_remove__
-            return 0
+            if [[ ! -e "$c1" ]]; then : > "$c1"; cat > /dev/null; return 3
+            elif [[ ! -e "$c2" ]]; then : > "$c2"; cat > /dev/null; print -r -- __hop_saved__; return 0
+            elif [[ ! -e "$c3" ]]; then : > "$c3"; cat > /dev/null; print -r -- "$3" > "$seen"; print -r -- "$tmp/TogRoot"; return 4
+            fi
+            cat > /dev/null; return 1
         }
-        _hop_edit_favorite "$tmp/TogRoot" >/dev/null 2>&1
-        grep -c 'Unfavorite / remove root' "$seen"
+        cd "$tmp/TogRoot" && hop >/dev/null 2>&1
+        grep -q 'Ctrl-D unfavorite' "$seen" && _hop_parse "$togrc" | awk -F'\t' '$1=="root" {found=1} END {print found ? 0 : 1}'
       )"
 
 check "hop -b <path> browses that path" \
