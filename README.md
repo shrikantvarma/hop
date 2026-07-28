@@ -11,6 +11,8 @@ memorising paths or filling your history with every directory you visit.
 > On GitHub, MOV files open or download as a separate file rather than playing
 > inline in the README.
 
+[![hop terminal demo](assets/hop-demo.gif)](https://github.com/shrikantvarma/hop/raw/refs/heads/main/assets/hop.mov)
+
 ## Install
 
 You need [zsh](https://www.zsh.org/) and [fzf](https://github.com/junegunn/fzf).
