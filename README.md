@@ -26,8 +26,7 @@ echo 'source ~/.hop/hop.plugin.zsh' >> ~/.zshrc
 source ~/.zshrc
 ```
 
-`hop` must be sourced, rather than executed, so it can change your current
-shell directory.
+
 
 ## Your first minute
 
