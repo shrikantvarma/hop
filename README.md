@@ -12,8 +12,7 @@ all the way down.
 
 > ▶ **[Watch the full terminal demo (MOV, 1.4 MB)](https://github.com/shrikantvarma/hop/raw/refs/heads/main/assets/hop.mov)**
 >
-> On GitHub, MOV files open or download as a separate file rather than playing
-> inline in the README.
+
 
 [![hop terminal demo](assets/hop-recording-zoom.gif)](https://github.com/shrikantvarma/hop/raw/refs/heads/main/assets/hop.mov)
 
