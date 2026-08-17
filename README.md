@@ -10,8 +10,7 @@ your history with every directory you visit. Each favorite gets its own search
 depth, so a huge folder stays shallow while your projects folder is searched
 all the way down.
 
-> ▶ **[Watch the full terminal demo (MOV, 1.4 MB)](https://github.com/shrikantvarma/hop/raw/refs/heads/main/assets/hop.mov)**
->
+
 
 
 [![hop terminal demo](assets/hop-recording-zoom.gif)](https://github.com/shrikantvarma/hop/raw/refs/heads/main/assets/hop.mov)
