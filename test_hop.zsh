@@ -442,8 +442,13 @@ check "removing the last entry leaves an empty file" \
 perm="$tmp/permrc"
 printf 'only\t%s\n' "$tmp/Other" > "$perm"; chmod 600 "$perm"
 _hop_fav_remove "$tmp/Other" "$perm"
+# GNU stat first, BSD fallback -- NOT the other way round: BSD's -f flag
+# means "format" but GNU's means "filesystem status", so `stat -f '%Lp'` on
+# Linux SUCCEEDS with garbage output and the || fallback never fires. GNU's
+# -c is a genuine error on BSD, so this direction fails cleanly into the
+# fallback on macOS.
 check "remove preserves file permissions" \
-      "600" "$(stat -f '%Lp' "$perm" 2>/dev/null || stat -c '%a' "$perm")"
+      "600" "$(stat -c '%a' "$perm" 2>/dev/null || stat -f '%Lp' "$perm")"
 
 # A favorite under $HOME is stored ~-abbreviated so the account name never
 # reaches the rc file; set-depth on it must keep the line alias-less.
