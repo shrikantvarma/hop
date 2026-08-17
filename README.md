@@ -60,8 +60,8 @@ hop -l              # list saved folders
 hop -e              # edit the saved-folder file directly
 ```
 
-Search is case-insensitive and matches anywhere in a path, not just the folder
-name at the end of it.
+Search is case-insensitive and matches any part of a path, so typing a parent
+folder's name finds everything saved under it.
 
 In the picker:
 
@@ -78,9 +78,9 @@ One key per verb, everywhere: `Enter` always means *go*, `Tab` (or `Space`,
 on screens where you aren't typing a search) always means *star/unstar*, and
 `Esc` always means *back*.
 
-When you can't remember a name at all, walk the tree instead of searching it.
-`→` opens the highlighted folder, `←` goes back up, and the preview pane on the
-right shows what's inside before you commit.
+When you can't remember a name at all, walk the tree. `→` opens the highlighted
+folder, `←` goes back up, and the preview pane on the right shows what's inside
+before you commit.
 
 ![Opening a folder with the right arrow, going back up, then landing further down the tree](assets/hop-walk.gif)
 
