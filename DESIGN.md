@@ -83,11 +83,38 @@ Only a leading `~` is expanded. A global substitution would corrupt paths that
 legitimately contain `~` — macOS iCloud containers are named things like
 `iCloud~md~obsidian`, which a naive `${p//\~/$HOME}` turns into nonsense.
 
+## Bookmarks are named by their path
+
+Settings writes a path-only line: an entry's identity is its ~-abbreviated
+path, not a generated alias. An earlier version slugged the basename and
+concatenated parent folders on collision (`/Clients/Acme/Code` → `acme-code`)
+— unique, but misleading, and assigned silently. Paths are already unique,
+display honestly, and make every ancestor folder name fuzzy-matchable.
+
+Aliases remain as hand-written jump tokens. They may not begin with `~` or
+`/`; that reservation is what keeps an alias-less line containing spaces
+unambiguous (`~/Daily Notes` is one path, not alias `~/Daily` + path
+`Notes`). The expanded path is also accepted as a jump token, because the
+shell rewrites `hop ~/Code` to `hop /Users/you/Code` before hop runs.
+
 ## Keybindings
 
-`→` descends, `←` ascends, and `Enter` accepts. Binding the arrows
-is safe because fzf aliases them to `ctrl-f`/`ctrl-b` (`forward-char` /
-`backward-char`), which remain available for moving the cursor inside the query.
+One key per verb, on every screen: `Enter` = go, `Tab`/`Space` = toggle the
+star, `Esc` = back, `?` = Settings. Enter never changes saved state anywhere
+— the old Settings browser toggled on Enter, which read as "select" on one
+screen and "go" on every other.
+
+`→` descends, `←` ascends. Binding the arrows is safe because fzf aliases
+them to `ctrl-f`/`ctrl-b` (`forward-char` / `backward-char`), which remain
+available for moving the cursor inside the query.
+
+Space is bound only on screens where the query is a short filter (browse,
+Settings): in the main search picker a space types an AND between fuzzy
+terms, so toggling there is `Tab` only. A top-level toggle in the main picker
+returns to the caller for a full re-rank (favorites move to the top);
+toggles while descended re-star in place, preserving cursor, level, and the
+typed query — kicking the user back to the top after each star would make
+bulk curation miserable. `Ctrl-T`/`Ctrl-D` survive as hidden aliases.
 
 Descent pushes the previous list and prompt onto parallel stacks, so backing out
 restores exactly what was on screen. Descending into a directory with no
@@ -119,7 +146,7 @@ user edits `.hoprc` and then wonders why the entry never appears.
 
 ## Testing
 
-`zsh test_hop.zsh` — 116 assertions over the pure units, including descent
+`zsh test_hop.zsh` — 126 assertions over the pure units, including descent
 through a symlinked parent, per-bookmark index depth, favorite round-trips that
 must restore the config byte-for-byte, paths containing spaces, paths
 containing literal `~` characters, and every `--expect` key.

@@ -64,24 +64,28 @@ In the picker:
 | `Enter` | Move to the selected folder |
 | `→` | Open the selected folder |
 | `←` | Go back one folder |
-| `Ctrl-T` | Open Settings / Add more folders |
+| `Tab` | Save or unsave the selected folder (★) |
+| `?` | Open Settings / Add more folders |
 | `Esc` | Close hop and stay where you are |
+
+One key per verb, everywhere: `Enter` always means *go*, `Tab` (or `Space`,
+on screens where you aren't typing a search) always means *star/unstar*, and
+`Esc` always means *back*.
 
 If the selected item is a file, hop moves to the file’s parent folder. It never
 opens files.
 
 ## Add folders and set search depth
 
-Press `Ctrl-T` from the main picker to open Settings.
+The quickest way to save a folder is `Tab` on any search result. For
+everything else, press `?` from the main picker to open Settings.
 
-- **Add more folders** lets you browse from your current directory and save or
-  remove folders.
-- **Saved folders & search depth** shows every saved folder and its current
-  path and `depth=N` value, so folders with the same name are easy to tell
-  apart.
-- Select a saved folder to change its depth (`0` through `6`). Press `Ctrl-D`
-  on a highlighted folder to immediately stop saving it; the list refreshes
-  in place.
+- **Add more folders** lets you browse from your current directory; `Space`
+  (or `Tab`) stars or unstars the highlighted folder without moving you,
+  `Enter` or `Esc` when you're done.
+- **Saved folders & search depth** shows every saved folder with its path and
+  `depth=N` value, so folders with the same name are easy to tell apart.
+  `Enter` changes a folder's depth (`0` through `6`); `Space` unstars it.
 
 Depth controls how far below a saved folder hop searches. `depth=0` includes
 only the saved folder. `depth=2`—the default—also searches two levels beneath
@@ -93,14 +97,18 @@ Your saved folders live in `~/.hoprc`. You can manage them in Settings or edit
 the file with `hop -e`.
 
 ```text
-# alias    folder                         optional search depth
-code        ~/Code                         depth=1
-notes       ~/Documents/Notes              depth=3
-dotfiles    ~/.config                      depth=0
+# folder (with an optional alias in front)   optional search depth
+~/Clients/Acme/Code                           depth=1
+~/Documents/Notes                             depth=3
+dotfiles    ~/.config                         depth=0
 ```
 
-Aliases are optional to remember: the picker also searches folder names and
-full paths. Comments and paths containing spaces are supported.
+Folders saved through Settings are stored as their path — no invented name to
+learn. Every part of the path is searchable, so typing `acme` or `code` finds
+`~/Clients/Acme/Code`. Add an alias in front of a path (like `dotfiles` above)
+when you want a short jump token: `hop dotfiles` goes straight there. Aliases
+may not begin with `~` or `/` — that's how hop tells the two forms apart.
+Comments and paths containing spaces are supported.
 
 ## Optional configuration
 
@@ -110,7 +118,8 @@ Set options before sourcing `hop.plugin.zsh` in your `.zshrc`.
 # Store saved folders somewhere else.
 HOPRC="$HOME/.config/hop/bookmarks"
 
-# Pass extra options to fzf.
+# Pass extra options to fzf. Search is case-insensitive by default;
+# add +i here to restore fzf's smart-case behavior.
 HOP_FZF_OPTS='--height=80% --border=rounded'
 # HOP_FZF_OPTS is word-split on whitespace, so a value with embedded spaces
 # (e.g. a --header) needs its own quoting layer, or should be left out.
@@ -177,7 +186,7 @@ Run the test suite with:
 zsh test_hop.zsh
 ```
 
-The suite currently has 117 checks for parsing, indexing, ranking, saved-folder
+The suite currently has 126 checks for parsing, indexing, ranking, saved-folder
 updates, symlink handling, and picker wiring.
 
 ## License

@@ -28,6 +28,25 @@ fi
 : ${HOP_DEFAULT_DEPTH:=2}
 
 # ---------------------------------------------------------------------------
+# _hop_display_path — abbreviate $HOME back to ~
+#
+# The inverse of the leading-~ expansion in _hop_parse_line. Used both for
+# picker/list display and when writing alias-less entries to the rc file, so
+# the account name never appears in either place.
+# ---------------------------------------------------------------------------
+_hop_display_path() {
+    emulate -L zsh
+    local p="$1"
+    if [[ "$p" == "$HOME" ]]; then
+        print -r -- "~"
+    elif [[ "$p" == "$HOME/"* ]]; then
+        print -r -- "~${p#$HOME}"
+    else
+        print -r -- "$p"
+    fi
+}
+
+# ---------------------------------------------------------------------------
 # _hop_parse_line — parse one raw rc line into its fields
 #
 # Shared by every function that reads rc-file lines (_hop_parse,
@@ -42,6 +61,8 @@ fi
 #           _hop_pl_rawpath  -- the path exactly as written (~ intact)
 #           _hop_pl_path     -- the path with a leading ~ expanded to $HOME
 #           _hop_pl_depth    -- the raw depth= token, or "" if absent
+#           _hop_pl_aliased  -- 1 for `alias path` lines, 0 for alias-less
+#                                path-only lines (name synthesized from path)
 #           _hop_pl_stripped -- the line with its trailing #comment removed;
 #                                callers that need to preserve the comment
 #                                when rewriting a line can recover it via
@@ -55,13 +76,33 @@ _hop_parse_line() {
     local line="$1"
     _hop_pl_stripped="${line%%'#'*}"                  # strip comments
     _hop_pl_name='' _hop_pl_rawpath='' _hop_pl_path='' _hop_pl_depth=''
+    _hop_pl_aliased=1
 
     [[ "$_hop_pl_stripped" == *[^[:space:]]* ]] || return 1   # blank / whitespace only
 
-    # Try the depth= form first. A keyed token is used rather than a bare
-    # trailing number because paths may contain spaces: "~/Notes/Chapter 3"
-    # would otherwise parse as path "~/Notes/Chapter" with depth 3.
-    if [[ "$_hop_pl_stripped" =~ '^[[:space:]]*([^[:space:]]+)[[:space:]]+(.*[^[:space:]])[[:space:]]+depth=([^[:space:]]+)[[:space:]]*$' ]]; then
+    # Alias-less entries: a line may be just a path (plus optional depth=).
+    #     ~/Clients/Acme/Code    depth=2
+    #     /opt/data
+    # Aliases never begin with `~` or `/`, so the first non-space character
+    # decides the form. Paths may contain spaces, so the path cannot be
+    # whitespace-split: the trailing depth= token is anchored instead, same
+    # as in the aliased forms below.
+    if [[ "$_hop_pl_stripped" =~ '^[[:space:]]*[~/]' ]]; then
+        _hop_pl_aliased=0
+        if [[ "$_hop_pl_stripped" =~ '^[[:space:]]*(.*[^[:space:]])[[:space:]]+depth=([^[:space:]]+)[[:space:]]*$' ]]; then
+            _hop_pl_rawpath="$match[1]"
+            _hop_pl_depth="$match[2]"
+        else
+            # Blank lines were rejected above, so this trim cannot fail.
+            [[ "$_hop_pl_stripped" =~ '^[[:space:]]*(.*[^[:space:]])[[:space:]]*$' ]]
+            _hop_pl_rawpath="$match[1]"
+        fi
+
+    # Aliased forms. Try the depth= form first. A keyed token is used rather
+    # than a bare trailing number because paths may contain spaces:
+    # "~/Notes/Chapter 3" would otherwise parse as path "~/Notes/Chapter"
+    # with depth 3.
+    elif [[ "$_hop_pl_stripped" =~ '^[[:space:]]*([^[:space:]]+)[[:space:]]+(.*[^[:space:]])[[:space:]]+depth=([^[:space:]]+)[[:space:]]*$' ]]; then
         _hop_pl_name="$match[1]"
         _hop_pl_rawpath="$match[2]"
         _hop_pl_depth="$match[3]"
@@ -81,6 +122,11 @@ _hop_parse_line() {
     elif [[ "$_hop_pl_path" == "~/"* ]]; then
         _hop_pl_path="$HOME/${_hop_pl_path#\~/}"
     fi
+
+    # An alias-less entry's display identity is its ~-abbreviated EXPANDED
+    # path, so `/Users/you/Code` and `~/Code` in the file produce the same
+    # name, and the account name never reaches the picker.
+    (( _hop_pl_aliased )) || _hop_pl_name="$(_hop_display_path "$_hop_pl_path")"
 }
 
 # ---------------------------------------------------------------------------
@@ -244,64 +290,6 @@ _hop_rank() {
 }
 
 # ---------------------------------------------------------------------------
-# _hop_alias_for — path + existing aliases -> a unique alias
-#
-#   _hop_alias_for /a/b/Daily\ Notes code notes   ->  daily-notes
-#
-# When the basename is already taken, use parent-path context before resorting
-# to a number: `/work/client/Code` becomes `client-code`, not `code-2`.
-# ---------------------------------------------------------------------------
-_hop_alias_for() {
-    emulate -L zsh
-    # ## ("one or more") needs extended_glob; without it the pattern is a
-    # literal # and the collapse silently does nothing (DESIGN.md trap 2).
-    setopt local_options extended_glob
-
-    # `p`, never `local path` — lowercase path is zsh's tied PATH array, and
-    # shadowing it breaks external-command lookup for the function's scope.
-    local p="$1"; shift
-    local -a taken=("$@")
-    local base="${p:t}" cand part parent n
-
-    base="${(L)base}"                       # lowercase
-    base="${base//[^a-z0-9]##/-}"           # runs of non-alphanumerics -> one -
-    base="${base##-}"                       # strip leading
-    base="${base%%-}"                       # strip trailing
-    [[ -n "$base" ]] || base="dir"
-
-    cand="$base"
-    (( ! ${taken[(Ie)$cand]} )) && { print -r -- "$cand"; return; }
-
-    # Grow the alias towards the filesystem root until its path context makes
-    # it unique. Do not expose a user's account name: $HOME is simply `home`.
-    parent="${p:h}"
-    while [[ "$parent" != "/" && -n "$parent" ]]; do
-        if [[ "$parent" == "$HOME" ]]; then
-            part="home"
-        else
-            part="${(L)${parent:t}}"
-            part="${part//[^a-z0-9]##/-}"
-            part="${part##-}"
-            part="${part%%-}"
-            [[ -n "$part" ]] || part="folder"
-        fi
-        cand="$part-$cand"
-        (( ! ${taken[(Ie)$cand]} )) && { print -r -- "$cand"; return; }
-        parent="${parent:h}"
-    done
-
-    # An identical ancestor chain is exceptionally rare (for example, a
-    # hand-written alias). Preserve uniqueness rather than refusing to save.
-    n=2
-    while (( ${taken[(Ie)$cand-$n]} )); do
-        (( n++ ))
-    done
-    cand="$cand-$n"
-
-    print -r -- "$cand"
-}
-
-# ---------------------------------------------------------------------------
 # _hop_fav_add — append a bookmark to the config file
 #
 # Idempotent: adding an already-bookmarked path does nothing.
@@ -310,7 +298,6 @@ _hop_fav_add() {
     emulate -L zsh
 
     local target="$1" rc="${2:-$HOPRC}"
-    local -a taken
 
     [[ -e "$rc" ]] || : > "$rc"
     if [[ ! -w "$rc" ]]; then
@@ -331,8 +318,10 @@ _hop_fav_add() {
         print >> "$rc"
     fi
 
-    taken=(${(f)"$(_hop_parse "$rc" 2>/dev/null | cut -f1)"})
-    printf '%s\t%s\n' "$(_hop_alias_for "$target" "${taken[@]}")" "$target" >> "$rc"
+    # No invented alias: the entry's identity is its path, stored
+    # ~-abbreviated so the account name stays out of the file. Users who
+    # want a short jump token add one by hand (hop -e).
+    print -r -- "$(_hop_display_path "$target")" >> "$rc"
 }
 
 # ---------------------------------------------------------------------------
@@ -373,19 +362,24 @@ _hop_fav_remove() {
 }
 
 # ---------------------------------------------------------------------------
-# _hop_split_expect — parse `fzf --expect` output into `key \t path`
+# _hop_split_expect — parse `fzf --print-query --expect` output into
+# `query \t key \t path`
 #
-# fzf emits the pressed key on line 1 (EMPTY for plain Enter) and the selected
-# record on line 2. Pure string handling, split out so it is testable without a
-# terminal.
+# fzf emits the current query on line 1 (empty if nothing was typed), the
+# pressed key on line 2 (EMPTY for plain Enter), and the selected record on
+# line 3. The query is carried so a favorite toggle can refresh the list
+# without throwing away what the user typed. Pure string handling, split out
+# so it is testable without a terminal.
 # ---------------------------------------------------------------------------
 _hop_split_expect() {
     emulate -L zsh
-    local out="$1" key sel
-    key="${out%%$'\n'*}"
-    sel="${out#*$'\n'}"
+    local out="$1" q rest key sel
+    q="${out%%$'\n'*}"
+    rest="${out#*$'\n'}"
+    key="${rest%%$'\n'*}"
+    sel="${rest#*$'\n'}"
     sel="${sel%%$'\t'*}"          # field 1 is the real path
-    printf '%s\t%s\n' "$key" "$sel"
+    printf '%s\t%s\t%s\n' "$q" "$key" "$sel"
 }
 
 # ---------------------------------------------------------------------------
@@ -405,39 +399,57 @@ _hop_format() {
 # ---------------------------------------------------------------------------
 # _hop_pick — consume `path \t display` lines on stdin, emit one chosen path
 #
-#   $1  initial query   $2  initial prompt   $3  header   $4 extra expected key
+#   $1  initial query   $2  initial prompt   $3  header
+#   $4  extra expected key(s), comma-separated -- any of them accepts the
+#       highlighted line with return 4 (the saved-folders list binds
+#       space,tab,ctrl-d this way)
 #   $5  with_settings -- truthy only at the one call site whose caller
-#       actually handles a return of 3 by opening Settings. Everywhere else
-#       Ctrl-T must stay unbound: binding it and showing the "^T Settings"
-#       hint on a picker that cannot honour it either gets swallowed by that
-#       caller's own `|| return 1`/`continue` (a silent, confusing cancel) or
-#       just propagates return 3 out to a caller with no Settings handling.
+#       actually handles a return of 3 (opening Settings) and 5 (a favorite
+#       toggle that needs the full list re-ranked). Everywhere else those
+#       keys must stay unbound: binding them on a picker whose caller cannot
+#       honour the return code either gets swallowed by that caller's own
+#       `|| return 1`/`continue` (a silent, confusing cancel) or just
+#       propagates out to a caller with no handling.
+#   $6  with_toggle -- Space/Tab toggle the highlighted item's favorite state
+#       INSIDE the picker loop: the list re-stars in place and the cursor,
+#       level, and typed query all survive. Used by the browse and
+#       Add-more-folders screens, where jumping back to the top after every
+#       toggle would make bulk curation miserable.
 #
 # Loops so the list can be replaced in place:
 #   →             descend into the highlighted directory
 #   ←             back out one level
 #   Enter         accept
+#   Space/Tab     toggle favorite (with_toggle; Tab only under with_settings)
 #
 # Binding the arrows is safe because fzf aliases them to ctrl-f / ctrl-b
 # (forward-char / backward-char), which remain available for moving the cursor
-# inside the query.
+# inside the query. Space is NEVER bound under with_settings: there the query
+# is the primary interface and a space types an AND between search terms.
+# `?` opens Settings (Ctrl-T kept as a hidden legacy alias); a literal ? is
+# essentially never part of a folder-name query.
 #
 # Return-code protocol -- every caller relies on these exact values:
 #   0    a selection was made (Enter); the path is on stdout
 #   1    cancelled (Esc, or fzf itself exited non-zero)
-#   3    Ctrl-T pressed with with_settings enabled -- caller should open
-#        Settings; nothing is printed
-#   4    the configured extra_key ($4) was pressed; the highlighted path is
-#        on stdout, same as a plain Enter
+#   3    ? (or Ctrl-T) pressed with with_settings enabled -- caller should
+#        open Settings; nothing is printed
+#   4    one of the configured extra keys ($4) was pressed; the highlighted
+#        path is on stdout, same as a plain Enter
+#   5    Tab pressed at the TOP level with with_settings enabled -- the
+#        caller should toggle the favorite and rebuild its re-ranked list.
+#        `query \t path` is on stdout so the search can be re-seeded.
+#        (Toggles below the top level are handled in place instead: only the
+#        top list's ordering depends on favorite state.)
 #   127  fzf is not installed
 # ---------------------------------------------------------------------------
 _hop_pick() {
     emulate -L zsh
 
     local query="$1"
-    local lines out key sel kids prompt="${2:-hop > }"
+    local lines out q key sel kids prompt="${2:-hop > }"
     local header="${3:-Enter hop   → descend   ← up}" extra_key="${4:-}"
-    local with_settings="${5:-0}"
+    local with_settings="${5:-0}" with_toggle="${6:-0}"
     local -a stack_lines stack_prompt expect
 
     if ! command -v fzf >/dev/null 2>&1; then
@@ -448,15 +460,18 @@ _hop_pick() {
     lines="$(cat)"
 
     expect=(right left)
-    (( with_settings )) && expect+=(ctrl-t)
-    [[ -n "$extra_key" ]] && expect+=("$extra_key")
-    (( with_settings )) && header="${header}   ^T Settings / Add more folders"
+    (( with_settings )) && expect+=('?' ctrl-t tab)
+    (( with_toggle )) && expect+=(tab space)
+    [[ -n "$extra_key" ]] && expect+=("${(s:,:)extra_key}")
+    (( with_settings )) && header="${header}   Tab ★   ? Settings"
 
     while true; do
         out="$(print -r -- "$lines" | fzf \
+              -i \
               --delimiter=$'\t' \
               --with-nth=2 \
               --query="$query" \
+              --print-query \
               --height=60% \
               --reverse \
               --border \
@@ -468,9 +483,19 @@ _hop_pick() {
               ${=HOP_FZF_OPTS})" || return 1
 
         out="$(_hop_split_expect "$out")"
+        q="${out%%$'\t'*}"
+        out="${out#*$'\t'}"
         key="${out%%$'\t'*}"
         sel="${out#*$'\t'}"
         query=''                       # don't re-seed after the first round
+
+        # Extra keys are checked before the named cases so a caller may bind
+        # space/tab (the saved-folders list does) without colliding with the
+        # toggle handling below.
+        if [[ -n "$extra_key" && ",$extra_key," == *",$key,"* ]]; then
+            print -r -- "$sel"
+            return 4
+        fi
 
         case "$key" in
             right)
@@ -488,19 +513,32 @@ _hop_pick() {
                     prompt="${stack_prompt[-1]}"
                     shift -p stack_lines
                     shift -p stack_prompt
+                    # Stars may have been toggled while a level deeper.
+                    (( with_toggle || with_settings )) \
+                        && lines="$(print -r -- "$lines" | _hop_restar)"
                 fi
                 ;;
-            ctrl-t)
+            '?'|ctrl-t)
                 (( with_settings )) || continue
                 return 3
+                ;;
+            tab|space)
+                [[ -n "$sel" ]] || continue
+                if (( with_toggle )) || (( with_settings && ${#stack_lines} )); then
+                    # Toggle in place: same level, same query, star refreshed.
+                    _hop_toggle_fav "$sel"
+                    lines="$(print -r -- "$lines" | _hop_restar)"
+                    query="$q"
+                elif (( with_settings )); then
+                    # Top level: ordering depends on favorite state, so the
+                    # caller must rebuild the ranked list and re-seed the query.
+                    printf '%s\t%s\n' "$q" "$sel"
+                    return 5
+                fi
                 ;;
             '')                        # Enter
                 print -r -- "$sel"
                 return 0
-                ;;
-            "$extra_key")
-                print -r -- "$sel"
-                return 4
                 ;;
             *)                         # Enter
                 print -r -- "$sel"
@@ -531,10 +569,24 @@ _hop_mark_favs() {
 }
 
 # ---------------------------------------------------------------------------
+# _hop_restar — refresh the ★ column after a favorite toggle
+#
+# Strips the two-column star prefix that _hop_mark_favs/_hop_format prepended
+# and re-marks from the current rc file, so an in-picker toggle is visible
+# immediately without rebuilding the listing. sub() rather than substr():
+# ★ is multibyte, and BSD awk's substr counts bytes.
+# ---------------------------------------------------------------------------
+_hop_restar() {
+    emulate -L zsh
+    awk -F'\t' 'BEGIN{OFS="\t"}
+        { if (!sub(/^★ /, "", $2)) sub(/^  /, "", $2); print }' | _hop_mark_favs
+}
+
+# ---------------------------------------------------------------------------
 # _hop_browse — descend-mode picker loop rooted at $1; prints the chosen path
 #
-# This is navigation-only. Favorite changes live in the Settings flow below,
-# so normal browsing never has a hidden destructive key binding.
+# with_toggle: Space/Tab star or unstar the highlighted item without leaving
+# the spot being browsed — the same gesture as the Settings screens.
 # ---------------------------------------------------------------------------
 _hop_browse() {
     emulate -L zsh
@@ -544,7 +596,8 @@ _hop_browse() {
         print -u2 "hop: ${base:t} has no subdirectories"
         return 1
     fi
-    sel="$(print -r -- "$kids" | _hop_pick '' "${base:t}/ > ")" || return $?
+    sel="$(print -r -- "$kids" | _hop_pick '' "${base:t}/ > " \
+        'Enter hop   → descend   ← up   Space ★' '' 0 1)" || return $?
     print -r -- "$sel"
 }
 
@@ -574,7 +627,13 @@ _hop_fav_set_depth() {
     while IFS= read -r line || [[ -n "$line" ]]; do
         if _hop_parse_line "$line" && [[ "$_hop_pl_path" == "$target" ]]; then
             comment="${line#$_hop_pl_stripped}"
-            out+=("$_hop_pl_name"$'\t'"$_hop_pl_rawpath depth=$depth${comment:+ }$comment")
+            # An alias-less line stays alias-less: rewriting it with its
+            # synthesized name would freeze that name into the file.
+            if (( _hop_pl_aliased )); then
+                out+=("$_hop_pl_name"$'\t'"$_hop_pl_rawpath depth=$depth${comment:+ }$comment")
+            else
+                out+=("$_hop_pl_rawpath depth=$depth${comment:+ }$comment")
+            fi
             continue
         fi
         out+=("$line")
@@ -632,8 +691,8 @@ _hop_settings() {
                     display_path=$2
                     if (display_path == home) display_path="~"
                     else if (index(display_path, home "/") == 1) display_path="~" substr(display_path, length(home) + 1)
-                    print $2, "★ " $1 "   " display_path "   depth=" $4
-                }' | _hop_pick '' 'saved folders > ' 'Enter change depth   Ctrl-D unfavorite   Esc back' 'ctrl-d')"
+                    print $2, "★ " $1 ($1 == display_path ? "" : "   " display_path) "   depth=" $4
+                }' | _hop_pick '' 'saved folders > ' 'Enter change depth   Space unstar   Esc back' 'space,tab,ctrl-d')"
                 case $? in
                     0) _hop_edit_favorite "$target" || true ;;
                     4) _hop_fav_remove "$target" || true ;;
@@ -646,25 +705,23 @@ _hop_settings() {
 
 # ---------------------------------------------------------------------------
 # _hop_manage_favorites — browse the filesystem and add/remove bookmarks.
-# Enter deliberately changes the highlighted item's saved state. Keeping this
-# operation in a visible Settings flow makes normal search and browsing safe.
+#
+# Space/Tab toggle the highlighted item's saved state inside the picker
+# (with_toggle), so the cursor stays put and several folders can be starred
+# in one pass. Enter and Esc both mean "done" — Enter never changes state,
+# the same as everywhere else in hop.
 # ---------------------------------------------------------------------------
 _hop_manage_favorites() {
     emulate -L zsh
-    local base="$1" kids sel
-    while true; do
-        kids="$(_hop_children "$base" | _hop_mark_favs)"
-        if [[ -z "$kids" ]]; then
-            print -u2 "hop: ${base:t} has no folders to add"
-            return 1
-        fi
-        sel="$(print -r -- "$kids" | _hop_pick '' "settings > " 'Enter add/remove favorite   → descend   ← up   Esc return')"
-        case $? in
-            0) _hop_toggle_fav "$sel" ;;
-            1) return 1 ;;
-            *) return $? ;;
-        esac
-    done
+    local base="$1" kids
+    kids="$(_hop_children "$base" | _hop_mark_favs)"
+    if [[ -z "$kids" ]]; then
+        print -u2 "hop: ${base:t} has no folders to add"
+        return 1
+    fi
+    print -r -- "$kids" | _hop_pick '' "settings > " \
+        'Space star/unstar   → descend   ← up   Enter/Esc done' '' 0 1 >/dev/null
+    return 0
 }
 
 # ---------------------------------------------------------------------------
@@ -708,7 +765,7 @@ hop() {
             print -r -- "       hop -v | --version  print version"
             print -r -- ""
             print -r -- "in the picker:  Enter hop   → descend   ← up"
-            print -r -- "                Ctrl-T Settings / Add more folders"
+            print -r -- "                Tab star/unstar   ? Settings / Add more folders"
             print -r -- ""
             print -r -- "first run: Settings / Add more folders opens at the current directory"
             return 0
@@ -731,8 +788,16 @@ hop() {
     records="$(_hop_parse)" || return 1
 
     if [[ "$1" == "-l" || "$1" == "--list" ]]; then
-        print -r -- "$records" | awk -F'\t' '{
-            printf "  %-22s %s%s  depth=%s\n", $1, $2, ($3=="missing" ? "  [missing]" : ""), $4
+        print -r -- "$records" | awk -F'\t' -v home="$HOME" '{
+            display_path=$2
+            if (display_path == home) display_path="~"
+            else if (index(display_path, home "/") == 1) display_path="~" substr(display_path, length(home) + 1)
+            # Alias-less entries: name IS the path — printing both would
+            # just duplicate the line.
+            if ($1 == display_path)
+                printf "  %s%s  depth=%s\n", display_path, ($3=="missing" ? "  [missing]" : ""), $4
+            else
+                printf "  %-22s %s%s  depth=%s\n", $1, display_path, ($3=="missing" ? "  [missing]" : ""), $4
         }'
         return 0
     fi
@@ -799,9 +864,12 @@ hop() {
         arg="${arg%/}"
     fi
 
-    # Exact alias match jumps straight there, skipping the picker.
+    # Exact alias match jumps straight there, skipping the picker. The
+    # expanded path also matches ($2): the shell turns `hop ~/Code` into
+    # `hop /Users/you/Code` before hop sees it, so an alias-less bookmark
+    # must be reachable by its absolute path as well as its ~ display name.
     if [[ -n "$arg" ]]; then
-        target="$(print -r -- "$records" | awk -F'\t' -v a="$arg" '$1==a {print $2; exit}')"
+        target="$(print -r -- "$records" | awk -F'\t' -v a="$arg" '$1==a || $2==a {print $2; exit}')"
     fi
 
     if (( descend )) && [[ -n "$target" ]]; then
@@ -825,6 +893,15 @@ hop() {
                 records="$(_hop_parse)" || return 1
                 target=''
                 arg=''
+                continue
+            fi
+            if (( rc_pick == 5 )); then
+                # Tab at the top level: toggle the favorite, rebuild the
+                # re-ranked list, and re-seed the query the user had typed.
+                _hop_toggle_fav "${target#*$'\t'}"
+                arg="${target%%$'\t'*}"
+                records="$(_hop_parse)" || return 1
+                target=''
                 continue
             fi
             (( rc_pick == 0 )) && break

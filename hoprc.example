@@ -1,21 +1,26 @@
 # ~/.hoprc — bookmarks for `hop`
 #
-#   alias<whitespace>path<whitespace>[depth=N]
+#   path                          [depth=N]     <- what Settings writes
+#   alias<whitespace>path         [depth=N]     <- add an alias by hand
 #
 # A leading ~ expands to $HOME. Paths may contain spaces. `#` starts a comment.
 # Every entry here is a favorite: it shows ★ and ranks above everything else.
 # Bookmarks whose path is gone are shown as [missing] rather than dropped.
+#
+# An entry without an alias is displayed and searched as its path — every
+# folder name in it matches. Aliases are short jump tokens (`hop notes`) and
+# may not begin with ~ or /, which is how the two forms are told apart.
 #
 # depth=N controls how far below a bookmark to index for search.
 #   depth=0  jump target only — nothing beneath it appears in search
 #   omitted  defaults to 2
 # Use depth=0 for big noisy trees you only ever cd into.
 
-code        ~/Code                        depth=0
-dotfiles    ~/.config                     depth=0
+~/Clients/Acme/Code               depth=1
+~/Documents/Daily Notes           depth=1
 
-notes       ~/Documents/Notes             depth=3
-daily       ~/Documents/Daily Notes      depth=1
+code        ~/Code                depth=0
+notes       ~/Documents/Notes     depth=3
 
 # Cloud-synced directories work even when reached through symlinks:
-# vault     ~/Library/Mobile Documents/iCloud~md~obsidian/Documents/Vault
+# ~/Library/Mobile Documents/iCloud~md~obsidian/Documents/Vault

@@ -193,26 +193,27 @@ check "nonexistent parent returns non-zero" \
 print ""
 print "_hop_split_expect"
 
-# fzf --expect: line 1 = key (empty on plain Enter), line 2 = selected record.
-check "Enter yields empty key and the path" \
-      $'\t/Users/x/Code' \
-      "$(_hop_split_expect $'\n/Users/x/Code\tcode    /Users/x/Code')"
+# fzf --print-query --expect: line 1 = query (empty if none typed), line 2 =
+# key (EMPTY on plain Enter), line 3 = selected record.
+check "Enter yields empty query, empty key, and the path" \
+      $'\t\t/Users/x/Code' \
+      "$(_hop_split_expect $'\n\n/Users/x/Code\tcode    /Users/x/Code')"
 
 check "right arrow yields key=right and the path" \
-      $'right\t/Users/x/Code' \
-      "$(_hop_split_expect $'right\n/Users/x/Code\tcode    /Users/x/Code')"
+      $'\tright\t/Users/x/Code' \
+      "$(_hop_split_expect $'\nright\n/Users/x/Code\tcode    /Users/x/Code')"
 
-check "left arrow yields key=left and the path" \
-      $'left\t/Users/x/Code' \
-      "$(_hop_split_expect $'left\n/Users/x/Code\tcode    /Users/x/Code')"
+check "the typed query survives in field 1, spaces intact" \
+      $'acme co\ttab\t/Users/x/Code' \
+      "$(_hop_split_expect $'acme co\ntab\n/Users/x/Code\tcode    /Users/x/Code')"
 
 check "path containing spaces survives the split" \
-      $'tab\t/Users/x/Daily Notes' \
-      "$(_hop_split_expect $'tab\n/Users/x/Daily Notes\tdaily   /Users/x/Daily Notes')"
+      $'\ttab\t/Users/x/Daily Notes' \
+      "$(_hop_split_expect $'\ntab\n/Users/x/Daily Notes\tdaily   /Users/x/Daily Notes')"
 
 check "[missing] marker in display does not leak into the path" \
-      $'\t/Users/x/gone' \
-      "$(_hop_split_expect $'\n/Users/x/gone\tgone    /Users/x/gone  [missing]')"
+      $'\t\t/Users/x/gone' \
+      "$(_hop_split_expect $'\n\n/Users/x/gone\tgone    /Users/x/gone  [missing]')"
 
 # --- _hop_index -----------------------------------------------------------
 print ""
@@ -314,39 +315,51 @@ check "record count is preserved" \
 check "fields are not mangled" \
       "dir	/a/fav	fav	1	0" "$(print -r -- "$rin" | _hop_rank | head -1)"
 
-# --- _hop_alias_for -------------------------------------------------------
+# --- _hop_display_path -----------------------------------------------------
 print ""
-print "_hop_alias_for"
+print "_hop_display_path"
 
-check "lowercases the basename" \
-      "assets" "$(_hop_alias_for /a/b/Assets)"
+check "abbreviates a path under \$HOME to ~" \
+      "~/.hop_test_home_dir" "$(_hop_display_path "$HOME/.hop_test_home_dir")"
 
-check "collapses spaces to a single hyphen" \
-      "daily-notes" "$(_hop_alias_for '/a/b/Daily  Notes')"
+check "\$HOME itself becomes ~" \
+      "~" "$(_hop_display_path "$HOME")"
 
-check "collapses dots (file extensions) to hyphens" \
-      "goals-md" "$(_hop_alias_for /a/b/goals.md)"
+check "paths outside \$HOME are left alone" \
+      "/opt/data" "$(_hop_display_path /opt/data)"
 
-check "strips leading and trailing separators" \
-      "inbox" "$(_hop_alias_for '/a/b/_Inbox_')"
+# --- alias-less entries ----------------------------------------------------
+print ""
+print "alias-less entries (path-only lines)"
 
-check "leaves underscores-only names usable" \
-      "b-ai-and-ml" "$(_hop_alias_for /a/b/B_AI_and_ML)"
+mkdir -p "$tmp/NoAlias" "$tmp/No Alias Spaced"
+arc="$tmp/aliaslessrc"
+cat > "$arc" <<EOF
+$tmp/NoAlias
+$tmp/No Alias Spaced    depth=3
+~/.hop_test_home_dir
+named    $tmp/NoAlias    depth=1
+EOF
+aout="$(_hop_parse "$arc" 2>"$tmp/aerr")"
+apath() { print -r -- "$aout" | awk -F'\t' -v p="$1" -v n="$2" '$2==p {print $n; exit}'; }
 
-check "no collision means no suffix" \
-      "assets" "$(_hop_alias_for /a/b/Assets code notes)"
+check "no lines rejected as malformed" \
+      "" "$(<"$tmp/aerr")"
 
-check "collision uses the parent folder, not a number" \
-      "b-assets" "$(_hop_alias_for /a/b/Assets assets notes)"
+check "path-only line: the path IS the name" \
+      "$tmp/NoAlias" "$(print -r -- "$aout" | awk -F'\t' -v p="$tmp/NoAlias" '$2==p {print $1; exit}')"
 
-check "nested collision adds more path context" \
-      "a-b-assets" "$(_hop_alias_for /a/b/Assets assets b-assets)"
+check "path-only line gets the default depth" \
+      "2" "$(apath "$tmp/NoAlias" 4)"
 
-check "a home-folder collision uses home, not the account name" \
-      "home-code" "$(_hop_alias_for "$HOME/Code" code)"
+check "path-only line with spaces keeps the path whole" \
+      "3" "$(apath "$tmp/No Alias Spaced" 4)"
 
-check "purely non-alphanumeric name falls back to 'dir'" \
-      "dir" "$(_hop_alias_for '/a/b/---')"
+check "path-only ~ line: path expands, name stays ~-abbreviated" \
+      "~/.hop_test_home_dir" "$(apath "$HOME/.hop_test_home_dir" 1)"
+
+check "aliased entries still parse alongside alias-less ones" \
+      "1" "$(print -r -- "$aout" | awk -F'\t' '$1=="named" {print $4; exit}')"
 
 # --- favorites round-trip -------------------------------------------------
 print ""
@@ -368,8 +381,8 @@ _hop_fav_add "$tmp/FavTarget" "$frc"
 check "add appends the new path" \
       "1" "$(_hop_parse "$frc" 2>/dev/null | grep -c "	$tmp/FavTarget	")"
 
-check "add derives the alias from the basename" \
-      "favtarget" "$(_hop_parse "$frc" 2>/dev/null | awk -F'\t' -v p="$tmp/FavTarget" '$2==p{print $1}')"
+check "add writes a path-only line (no invented alias)" \
+      "$tmp/FavTarget" "$(_hop_parse "$frc" 2>/dev/null | awk -F'\t' -v p="$tmp/FavTarget" '$2==p{print $1}')"
 
 check "add preserves the leading comment" \
       "1" "$(grep -c '^# leading comment' "$frc")"
@@ -432,6 +445,20 @@ _hop_fav_remove "$tmp/Other" "$perm"
 check "remove preserves file permissions" \
       "600" "$(stat -f '%Lp' "$perm" 2>/dev/null || stat -c '%a' "$perm")"
 
+# A favorite under $HOME is stored ~-abbreviated so the account name never
+# reaches the rc file; set-depth on it must keep the line alias-less.
+hfrc="$tmp/homefavrc"; : > "$hfrc"
+_hop_fav_add "$HOME/.hop_test_home_dir" "$hfrc"
+check "a favorite under \$HOME is stored ~-abbreviated" \
+      "1" "$(grep -Fxc -- '~/.hop_test_home_dir' "$hfrc")"
+
+_hop_fav_set_depth "$HOME/.hop_test_home_dir" 4 "$hfrc"
+check "set-depth keeps an alias-less entry alias-less" \
+      "~/.hop_test_home_dir depth=4" "$(<$hfrc)"
+
+check "the ~-stored favorite round-trips through parse to the expanded path" \
+      "$HOME/.hop_test_home_dir" "$(_hop_parse "$hfrc" 2>/dev/null | cut -f2)"
+
 # _hop_fav_set_depth needs the same empty-array guard as _hop_fav_remove:
 # rewriting a genuinely empty rc file must not turn it into one blank line.
 edrc="$tmp/emptydepthrc"
@@ -448,10 +475,13 @@ mkdir -p "$tmp/TogRoot/sub"
 
 # The stub runs inside hop()'s own command substitution, so shell-variable
 # state cannot escape it — call-counting must live on the filesystem.
-check "Ctrl-T opens Settings / Add more folders and adds a favorite" \
-      "1" "$(
+# Enter in Add-more-folders means "done", never "toggle" — toggling lives on
+# Space/Tab inside the picker itself. A stubbed Enter-with-path must therefore
+# leave the rc file untouched.
+check "Add more folders: Enter does not toggle (rc unchanged)" \
+      "0" "$(
         togrc="$tmp/togrc1"; printf 'root\t%s\tdepth=1\n' "$tmp/TogRoot" > "$togrc"
-        HOPRC="$togrc"; flag="$tmp/settingsflag1"; rm -f "$flag"
+        HOPRC="$togrc"; flag="$tmp/settingsflag1"; rm -f "$flag" "$flag.add" "$flag.folder"
         _hop_pick() {
             if [[ ! -e "$flag" ]]; then : > "$flag"; cat > /dev/null; return 3
             elif [[ ! -e "$flag.add" ]]; then : > "$flag.add"; cat > /dev/null; print -r -- __hop_add__; return 0
@@ -461,6 +491,21 @@ check "Ctrl-T opens Settings / Add more folders and adds a favorite" \
         }
         hop >/dev/null 2>&1
         _hop_parse "$togrc" 2>/dev/null | grep -c "	$tmp/TogRoot/sub	"
+      )"
+
+check "Add more folders runs its picker in toggle mode (with_toggle=1)" \
+      "1" "$(
+        togrc="$tmp/togrc1b"; printf 'root\t%s\tdepth=1\n' "$tmp/TogRoot" > "$togrc"
+        HOPRC="$togrc"; flag="$tmp/settingsflag1b"; seen="$tmp/togmode-seen"
+        rm -f "$flag" "$flag.add" "$seen"
+        _hop_pick() {
+            if [[ ! -e "$flag" ]]; then : > "$flag"; cat > /dev/null; return 3
+            elif [[ ! -e "$flag.add" ]]; then : > "$flag.add"; cat > /dev/null; print -r -- __hop_add__; return 0
+            fi
+            print -r -- "${6:-0}" >> "$seen"; cat > /dev/null; return 1
+        }
+        hop >/dev/null 2>&1
+        grep -cx '1' "$seen"
       )"
 
 check "Settings can change a favorite's search depth" \
@@ -509,7 +554,7 @@ check "Settings can remove a saved folder" \
         _hop_parse "$togrc" 2>/dev/null | grep -c .
       )"
 
-check "Ctrl-D directly unfavorites and returns to the saved-folder list" \
+check "Space (via the extra-key list) unfavorites from the saved-folder list" \
       "1" "$(
         togrc="$tmp/togrc3-label"; printf 'root\t%s\tdepth=1\nother\t%s\tdepth=1\n' "$tmp/TogRoot" "$tmp/TogRoot/sub" > "$togrc"
         HOPRC="$togrc"; c1="$tmp/sf3-label-a"; c2="$tmp/sf3-label-b"; c3="$tmp/sf3-label-c"; seen="$tmp/sf3-label"; rm -f "$c1" "$c2" "$c3" "$seen"
@@ -521,7 +566,7 @@ check "Ctrl-D directly unfavorites and returns to the saved-folder list" \
             cat > /dev/null; return 1
         }
         cd "$tmp/TogRoot" && hop >/dev/null 2>&1
-        grep -q 'Ctrl-D unfavorite' "$seen" && _hop_parse "$togrc" | awk -F'\t' '$1=="root" {found=1} END {print found ? 0 : 1}'
+        grep -q 'Space unstar' "$seen" && _hop_parse "$togrc" | awk -F'\t' '$1=="root" {found=1} END {print found ? 0 : 1}'
       )"
 
 check "hop -b <path> browses that path" \
@@ -635,7 +680,7 @@ print "_hop_pick"
 check "Enter with no extra_key returns 0 and prints the selection" \
       $'0\t/tmp/foo' \
       "$(
-        fzf() { cat > /dev/null; printf '%s\n' '' $'/tmp/foo\tfoo'; }
+        fzf() { cat > /dev/null; printf '%s\n' '' '' $'/tmp/foo\tfoo'; }
         out="$(print -r -- $'/tmp/foo\tfoo' | _hop_pick)"; rc=$?
         printf '%s\t%s' "$rc" "$out"
       )"
@@ -643,7 +688,7 @@ check "Enter with no extra_key returns 0 and prints the selection" \
 check "Enter still returns 0 when an extra_key is configured" \
       $'0\t/tmp/foo' \
       "$(
-        fzf() { cat > /dev/null; printf '%s\n' '' $'/tmp/foo\tfoo'; }
+        fzf() { cat > /dev/null; printf '%s\n' '' '' $'/tmp/foo\tfoo'; }
         out="$(print -r -- $'/tmp/foo\tfoo' | _hop_pick '' 'prompt > ' 'header' 'ctrl-d')"; rc=$?
         printf '%s\t%s' "$rc" "$out"
       )"
@@ -651,7 +696,7 @@ check "Enter still returns 0 when an extra_key is configured" \
 check "pressing the configured extra_key still returns 4" \
       $'4\t/tmp/foo' \
       "$(
-        fzf() { cat > /dev/null; printf '%s\n' 'ctrl-d' $'/tmp/foo\tfoo'; }
+        fzf() { cat > /dev/null; printf '%s\n' '' 'ctrl-d' $'/tmp/foo\tfoo'; }
         out="$(print -r -- $'/tmp/foo\tfoo' | _hop_pick '' 'prompt > ' 'header' 'ctrl-d')"; rc=$?
         printf '%s\t%s' "$rc" "$out"
       )"
@@ -662,7 +707,7 @@ check "pressing the configured extra_key still returns 4" \
 check "ctrl-t returns 3 when with_settings is enabled" \
       $'3\t' \
       "$(
-        fzf() { cat > /dev/null; printf '%s\n' 'ctrl-t' $'/tmp/foo\tfoo'; }
+        fzf() { cat > /dev/null; printf '%s\n' '' 'ctrl-t' $'/tmp/foo\tfoo'; }
         out="$(print -r -- $'/tmp/foo\tfoo' | _hop_pick '' '' '' '' 1)"; rc=$?
         printf '%s\t%s' "$rc" "$out"
       )"
@@ -675,13 +720,70 @@ check "ctrl-t is a harmless no-op (not a cancel) when with_settings is off" \
             cat > /dev/null
             if [[ ! -e "$seen" ]]; then
                 : > "$seen"
-                printf '%s\n' 'ctrl-t' $'/tmp/foo\tfoo'
+                printf '%s\n' '' 'ctrl-t' $'/tmp/foo\tfoo'
             else
-                printf '%s\n' '' $'/tmp/foo\tfoo'
+                printf '%s\n' '' '' $'/tmp/foo\tfoo'
             fi
         }
         out="$(print -r -- $'/tmp/foo\tfoo' | _hop_pick)"; rc=$?
         printf '%s\t%s' "$rc" "$out"
+      )"
+
+check "? returns 3 (Settings) when with_settings is enabled" \
+      $'3\t' \
+      "$(
+        fzf() { cat > /dev/null; printf '%s\n' '' '?' $'/tmp/foo\tfoo'; }
+        out="$(print -r -- $'/tmp/foo\tfoo' | _hop_pick '' '' '' '' 1)"; rc=$?
+        printf '%s\t%s' "$rc" "$out"
+      )"
+
+check "space via the extra-key list returns 4" \
+      $'4\t/tmp/foo' \
+      "$(
+        fzf() { cat > /dev/null; printf '%s\n' '' 'space' $'/tmp/foo\tfoo'; }
+        out="$(print -r -- $'/tmp/foo\tfoo' | _hop_pick '' '' '' 'space,tab,ctrl-d')"; rc=$?
+        printf '%s\t%s' "$rc" "$out"
+      )"
+
+check "tab at the top of the search picker returns 5 with query and path" \
+      $'5\tqq\t/tmp/foo' \
+      "$(
+        fzf() { cat > /dev/null; printf '%s\n' 'qq' 'tab' $'/tmp/foo\t★ foo'; }
+        out="$(print -r -- $'/tmp/foo\t★ foo' | _hop_pick '' '' '' '' 1)"; rc=$?
+        printf '%s\t%s' "$rc" "$out"
+      )"
+
+# The heart of the toggle UX: Space stars the item WITHOUT leaving the picker
+# — the list re-stars in place, the typed query is re-seeded, and a later
+# Enter still selects normally.
+tog_pk="$tmp/togpick"
+mkdir -p "$tog_pk/A" "$tog_pk/B"
+
+check "space in toggle mode: favorite saved, star refreshed, query kept, picker open" \
+      $'0\t'"$tog_pk/B"$'\t1\t1\tqq' \
+      "$(
+        togrc="$tmp/togpickrc"; : > "$togrc"; HOPRC="$togrc"
+        st="$tmp/togpick-step"; seen="$tmp/togpick-seen"; qseen="$tmp/togpick-q"
+        rm -f "$st" "$seen" "$qseen"
+        fzf() {
+            local a
+            if [[ ! -e "$st" ]]; then
+                : > "$st"; cat > /dev/null
+                printf '%s\n' 'qq' 'space' "$tog_pk/A"$'\t''  A/'
+            else
+                cat > "$seen"
+                for a in "$@"; do
+                    [[ "$a" == --query=* ]] && print -r -- "${a#--query=}" > "$qseen"
+                done
+                printf '%s\n' '' '' "$tog_pk/B"$'\t''  B/'
+            fi
+        }
+        lines="$tog_pk/A"$'\t''  A/'$'\n'"$tog_pk/B"$'\t''  B/'
+        out="$(print -r -- "$lines" | _hop_pick '' '' '' '' 0 1)"; rc=$?
+        printf '%s\t%s\t%s\t%s\t%s' "$rc" "$out" \
+            "$(_hop_parse "$togrc" 2>/dev/null | grep -c "	$tog_pk/A	")" \
+            "$(grep -c '★ A/' "$seen")" \
+            "$(<"$qseen")"
       )"
 
 # Descend/back stack: → replaces the list in place with real children (via
@@ -701,12 +803,12 @@ check "right descends into children, left restores the original list, Enter sele
             cat > /dev/null
             if [[ ! -e "$step.1" ]]; then
                 : > "$step.1"
-                printf '%s\n' 'right' "$pkroot/ChildA"$'\t''ChildA/'$'\t''dir'
+                printf '%s\n' '' 'right' "$pkroot/ChildA"$'\t''ChildA/'$'\t''dir'
             elif [[ ! -e "$step.2" ]]; then
                 : > "$step.2"
-                printf '%s\n' 'left' "$pkroot/ChildA/Grandchild"$'\t''Grandchild/'$'\t''dir'
+                printf '%s\n' '' 'left' "$pkroot/ChildA/Grandchild"$'\t''Grandchild/'$'\t''dir'
             else
-                printf '%s\n' '' "$pkroot/ChildB"$'\t''ChildB/'$'\t''dir'
+                printf '%s\n' '' '' "$pkroot/ChildB"$'\t''ChildB/'$'\t''dir'
             fi
         }
         out="$(print -r -- "$pklines" | _hop_pick)"; rc=$?
@@ -732,6 +834,33 @@ check "-l shows the depth" \
 
 check "exact alias still jumps without a picker" \
       "$tmp/OrchRoot" "$(HOPRC="$hrc" hop orch >/dev/null 2>&1 && pwd)"
+cd "$tmp"
+
+# Tab in the main picker (return 5): hop() must toggle the favorite, rebuild
+# the list, and re-seed the query the user had typed.
+check "Tab in the main picker stars the item and re-seeds the query" \
+      $'1\tqq' \
+      "$(
+        togrc="$tmp/togrc-tab-main"; printf 'root\t%s\tdepth=1\n' "$tmp/OrchRoot" > "$togrc"
+        HOPRC="$togrc"; flag="$tmp/tabmain-flag"; qseen="$tmp/tabmain-q"
+        rm -f "$flag" "$qseen"
+        _hop_pick() {
+            if [[ ! -e "$flag" ]]; then
+                : > "$flag"; cat > /dev/null
+                printf '%s\t%s\n' 'qq' "$tmp/OrchRoot/sub"; return 5
+            fi
+            print -r -- "$1" > "$qseen"; cat > /dev/null; return 1
+        }
+        hop >/dev/null 2>&1
+        printf '%s\t%s' \
+            "$(_hop_parse "$togrc" 2>/dev/null | grep -c "	$tmp/OrchRoot/sub	")" \
+            "$(<"$qseen")"
+      )"
+
+# The shell expands ~ before hop sees it, so an alias-less bookmark must be
+# reachable by its full expanded path as well.
+check "an exact expanded path jumps without a picker" \
+      "$tmp/OrchRoot" "$(HOPRC="$hrc" hop "$tmp/OrchRoot" >/dev/null 2>&1 && pwd)"
 cd "$tmp"
 
 check "hop <alias>/ opens the picker INSIDE that bookmark instead of jumping" \
