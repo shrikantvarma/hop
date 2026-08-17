@@ -1,4 +1,4 @@
-# Half-remember a folder name, fuzzy-find it, land, start working.
+# Half-remember a folder name, fuzzy-find it, land in it.
 # Run from the repository root:  vhs demo/hero.tape
 
 Output assets/hop-demo.gif
@@ -31,6 +31,4 @@ Sleep 900ms
 Down
 Sleep 1200ms
 Enter
-Sleep 1500ms
-Type "claude"
-Sleep 2500ms
+Sleep 3s

@@ -1,4 +1,4 @@
-# First run: no bookmarks yet. Star two folders from Settings, then search them.
+# First run: nothing saved yet. Star two folders with Space, then search them.
 # Run from the repository root:  vhs demo/setup.tape
 
 Output assets/hop-setup.gif
@@ -24,15 +24,21 @@ Type "hop"
 Sleep 500ms
 Enter
 Sleep 2s
+
+# Settings opens here: choose "Add more folders".
 Enter
-Sleep 1800ms
-Enter
+Sleep 2s
+
+# Space stars the highlighted folder and leaves the cursor where it is.
+Space
 Sleep 1500ms
 Down
-Sleep 1000ms
+Sleep 900ms
+Space
+Sleep 1800ms
+
+# Enter means done, never "save".
 Enter
-Sleep 1500ms
-Escape
 Sleep 1200ms
 Escape
-Sleep 2s
+Sleep 2500ms

@@ -3,8 +3,9 @@
 # names, or account name can appear on screen. The .tape files run this first,
 # then start a shell with HOME pointed at it.
 #
-#   zsh demo/sandbox.zsh saved   # two folders already bookmarked
-#   zsh demo/sandbox.zsh fresh   # nothing bookmarked yet (first-run flow)
+#   zsh demo/sandbox.zsh saved     # two folders saved, path-identity (default)
+#   zsh demo/sandbox.zsh aliases   # same folders, with hand-added aliases
+#   zsh demo/sandbox.zsh fresh     # nothing saved yet (first-run flow)
 #
 # The sandbox sits at a fixed, account-free path because hop prints $HOPRC and
 # $PWD in full on first run — a path under the real home would leak into frame.
@@ -23,10 +24,25 @@ rm -rf "$sandbox"
 mkdir -p "$sandbox"
 cp -R demo/Code demo/Obsidian "$sandbox/"
 
-if [[ "$mode" == saved ]]; then
-    cat > "$sandbox/.hoprc" <<'EOF'
+case "$mode" in
+    saved)
+        # What Settings itself writes: path-only lines, no aliases.
+        cat > "$sandbox/.hoprc" <<'EOF'
+# ~/.hoprc — bookmarks for `hop`
+~/Code       depth=3
+~/Obsidian   depth=3
+EOF
+        ;;
+    aliases)
+        cat > "$sandbox/.hoprc" <<'EOF'
 # ~/.hoprc — bookmarks for `hop`
 code       ~/Code       depth=3
 obsidian   ~/Obsidian   depth=3
 EOF
-fi
+        ;;
+    fresh) ;;
+    *)
+        print -u2 "sandbox.zsh: unknown mode '$mode' (saved|aliases|fresh)"
+        exit 1
+        ;;
+esac

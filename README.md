@@ -10,10 +10,10 @@ your history with every directory you visit. Each favorite gets its own search
 depth, so a huge folder stays shallow while your projects folder is searched
 all the way down.
 
+![Typing `hop obs`, picking a folder from the results, and landing in it](assets/hop-demo.gif)
 
-
-
-[![hop terminal demo](assets/hop-recording-zoom.gif)](https://github.com/shrikantvarma/hop/raw/refs/heads/main/assets/hop.mov)
+You don't have to remember where a folder lives, or what you called it. Type
+the few letters you do remember, look at what comes back, and go.
 
 ## Install
 
@@ -24,8 +24,6 @@ git clone https://github.com/shrikantvarma/hop.git ~/.hop
 echo 'source ~/.hop/hop.plugin.zsh' >> ~/.zshrc
 source ~/.zshrc
 ```
-
-
 
 ## Your first minute
 
@@ -42,7 +40,11 @@ On your first run, hop opens Settings at your current directory.
 3. Press `Space` on a folder to save it — star as many as you like.
 4. Press `Enter` or `Esc` when you're done.
 
-Saved folders appear first in future searches and are marked with `★`.
+![Starring two folders from Settings on a first run, then searching them](assets/hop-setup.gif)
+
+Saved folders appear first in future searches and are marked with `★`. Once
+something is saved, `hop` goes straight to the search picker instead of
+Settings.
 
 ## Everyday use
 
@@ -50,12 +52,16 @@ Run `hop`, type a few letters, then press `Enter` to move there.
 
 ```sh
 hop                 # search saved folders and their contents
-hop notes           # jump straight to the saved alias "notes"
+hop notes           # search, pre-filtered by "notes"
 hop notes/          # browse inside the saved folder "notes"
+hop -f              # pick from saved folders only, ignoring their contents
 hop -b ~/Code       # browse a folder without saving it
 hop -l              # list saved folders
 hop -e              # edit the saved-folder file directly
 ```
+
+Search is case-insensitive and matches anywhere in a path, not just the folder
+name at the end of it.
 
 In the picker:
 
@@ -71,6 +77,12 @@ In the picker:
 One key per verb, everywhere: `Enter` always means *go*, `Tab` (or `Space`,
 on screens where you aren't typing a search) always means *star/unstar*, and
 `Esc` always means *back*.
+
+When you can't remember a name at all, walk the tree instead of searching it.
+`→` opens the highlighted folder, `←` goes back up, and the preview pane on the
+right shows what's inside before you commit.
+
+![Opening a folder with the right arrow, going back up, then landing further down the tree](assets/hop-walk.gif)
 
 If the selected item is a file, hop moves to the file’s parent folder. It never
 opens files.
@@ -105,10 +117,15 @@ dotfiles    ~/.config                         depth=0
 
 Folders saved through Settings are stored as their path — no invented name to
 learn. Every part of the path is searchable, so typing `acme` or `code` finds
-`~/Clients/Acme/Code`. Add an alias in front of a path (like `dotfiles` above)
-when you want a short jump token: `hop dotfiles` goes straight there. Aliases
-may not begin with `~` or `/` — that's how hop tells the two forms apart.
-Comments and paths containing spaces are supported.
+`~/Clients/Acme/Code`. Comments and paths containing spaces are supported.
+
+Add an alias in front of a path (like `dotfiles` above) when you want a short
+jump token. An exact alias skips the picker completely and moves you in one
+keystroke, which is worth setting up for the two or three folders you open all
+day. Aliases may not begin with `~` or `/` — that's how hop tells the two forms
+apart.
+
+![Typing `hop code` and `hop obsidian` to move between folders with no picker](assets/hop-alias.gif)
 
 ## Optional configuration
 

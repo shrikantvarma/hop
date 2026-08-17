@@ -1,4 +1,4 @@
-# An exact alias skips the picker entirely.
+# A hand-added alias is an exact jump token: it skips the picker entirely.
 # Run from the repository root:  vhs demo/alias.tape
 
 Output assets/hop-alias.gif
@@ -11,7 +11,7 @@ Set Theme "Catppuccin Mocha"
 Set TypingSpeed 70ms
 
 Hide
-Type "zsh demo/sandbox.zsh saved && env HOME=/private/tmp/demo HOPRC=/private/tmp/demo/.hoprc HOP_PLUGIN=$PWD/hop.plugin.zsh zsh -f"
+Type "zsh demo/sandbox.zsh aliases && env HOME=/private/tmp/demo HOPRC=/private/tmp/demo/.hoprc HOP_PLUGIN=$PWD/hop.plugin.zsh zsh -f"
 Enter
 Sleep 700ms
 Type "cd && source $HOP_PLUGIN && PROMPT='%F{6}%~%f ❯ ' && clear"
