@@ -39,8 +39,8 @@ On your first run, hop opens Settings at your current directory.
 
 1. Choose **Add more folders**.
 2. Use `→` to open a folder and `←` to go back.
-3. Press `Enter` on a folder to save it.
-4. Press `Esc` to return to search.
+3. Press `Space` on a folder to save it — star as many as you like.
+4. Press `Enter` or `Esc` when you're done.
 
 Saved folders appear first in future searches and are marked with `★`.
 

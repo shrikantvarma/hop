@@ -23,8 +23,8 @@ loop control.
 | `_hop_parse` | `.hoprc` → `alias \t path \t (ok\|missing)` | yes |
 | `_hop_children` | dir → immediate subdirs as `path \t name` | yes (reads fs) |
 | `_hop_format` | records → `path \t display` picker lines | yes |
-| `_hop_split_expect` | `fzf --expect` output → `key \t path` | yes |
-| `_hop_pick` | picker loop over `path \t display` lines | no (TTY) |
+| `_hop_split_expect` | `fzf --print-query --expect` output → `query \t key \t path` | yes |
+| `_hop_pick` | picker loop over `path \t display` lines; in-place ★ toggles | no (TTY) |
 | `hop` | orchestration; the only unit that calls `cd` | no |
 
 `_hop_pick` consumes a neutral `path \t display` and knows nothing about the
