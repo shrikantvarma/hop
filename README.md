@@ -69,7 +69,7 @@ In the picker:
 | --- | --- |
 | `Enter` | Move to the selected folder |
 | `→` | Open the selected folder |
-| `←` | Go back one folder |
+| `←` | Go up to the parent folder |
 | `Tab` | Save or unsave the selected folder (★) |
 | `?` | Open Settings / Add more folders |
 | `Esc` | Close hop and stay where you are |
@@ -79,7 +79,8 @@ on screens where you aren't typing a search) always means *star/unstar*, and
 `Esc` always means *back*.
 
 When you can't remember a name at all, walk the tree. `→` opens the highlighted
-folder, `←` goes back up, and the preview pane on the right shows what's inside
+folder, `←` goes up to its parent — all the way to `/` if you keep going — and
+the preview pane on the right shows what's inside
 before you commit.
 
 ![Opening a folder with the right arrow, going back up, then landing further down the tree](assets/hop-walk.gif)
@@ -203,7 +204,7 @@ Run the test suite with:
 zsh test_hop.zsh
 ```
 
-The suite currently has 126 checks for parsing, indexing, ranking, saved-folder
+The suite currently has 131 checks for parsing, indexing, ranking, saved-folder
 updates, symlink handling, and picker wiring.
 
 ## License

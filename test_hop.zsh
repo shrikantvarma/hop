@@ -820,6 +820,84 @@ check "right descends into children, left restores the original list, Enter sele
         printf '%s\t%s' "$rc" "$out"
       )"
 
+# ← with nothing to pop walks up the real tree: list the parent's children
+# with the folder we came from lifted to the top (fzf keeps input order, so
+# that is where the cursor lands).
+uproot="$tmp/pick_up"
+mkdir -p "$uproot/Aaa" "$uproot/Mid/Deep/Leaf" "$uproot/Zzz"
+
+check "_hop_lift moves the matching path to the top" \
+      $'/b\tB\n/a\tA\n/c\tC' \
+      "$(printf '/a\tA\n/b\tB\n/c\tC\n' | _hop_lift /b)"
+
+check "left at the launch level lists the parent, came-from folder first" \
+      $'0\t'"$uproot/Mid"$'\t'"$uproot/Mid"$'\t'"$uproot/Aaa"$'\t'"$uproot/Zzz" \
+      "$(
+        step="$tmp/pickup-step"; rm -f "$step.1"
+        seen="$tmp/pickup-seen"
+        fzf() {
+            if [[ ! -e "$step.1" ]]; then
+                : > "$step.1"; cat > /dev/null
+                printf '%s\n' '' 'left' "$uproot/Mid/Deep"$'\t''Deep/'$'\t''dir'
+            else
+                cut -f1 > "$seen"
+                printf '%s\n' '' '' "$uproot/Mid"$'\t''Mid/'$'\t''dir'
+            fi
+        }
+        out="$(_hop_children "$uproot/Mid" | _hop_pick '' 'Mid/ > ' '' '' 0 1 "$uproot/Mid")"; rc=$?
+        printf '%s\t%s\t%s' "$rc" "$out" "$(paste -sd '\t' "$seen")"
+      )"
+
+check "left twice keeps climbing (grandparent), then right/left round-trips" \
+      $'0\t'"$uproot/Mid/Deep" \
+      "$(
+        n="$tmp/pickup2-n"; : > "$n"
+        fzf() {
+            cat > /dev/null
+            print x >> "$n"
+            case "$(wc -l < "$n" | tr -d ' ')" in
+                1) printf '%s\n' '' 'left' "$uproot/Mid/Deep/Leaf"$'\t''Leaf/'$'\t''dir' ;;
+                2) printf '%s\n' '' 'left' "$uproot/Mid/Deep"$'\t''Deep/'$'\t''dir' ;;
+                3) printf '%s\n' '' 'right' "$uproot/Mid"$'\t''Mid/'$'\t''dir' ;;
+                4) printf '%s\n' '' 'left' "$uproot/Mid/Deep"$'\t''Deep/'$'\t''dir' ;;
+                *) printf '%s\n' '' '' "$uproot/Mid/Deep"$'\t''Deep/'$'\t''dir' ;;
+            esac
+        }
+        out="$(_hop_children "$uproot/Mid/Deep" | _hop_pick '' '' '' '' 0 1 "$uproot/Mid/Deep")"; rc=$?
+        printf '%s\t%s' "$rc" "$out"
+      )"
+
+check "left with no base (search results) climbs from the highlighted item" \
+      "$uproot/Mid"$'\t'"$uproot/Aaa"$'\t'"$uproot/Zzz" \
+      "$(
+        step="$tmp/pickup3-step"; rm -f "$step.1"
+        seen="$tmp/pickup3-seen"
+        fzf() {
+            if [[ ! -e "$step.1" ]]; then
+                : > "$step.1"; cat > /dev/null
+                printf '%s\n' '' 'left' "$uproot/Mid"$'\t''  Mid'
+            else
+                cut -f1 > "$seen"
+                printf '%s\n' '' '' "$uproot/Aaa"$'\t''Aaa/'$'\t''dir'
+            fi
+        }
+        printf '%s\t  Mid\n' "$uproot/Mid" | _hop_pick >/dev/null
+        paste -sd '\t' "$seen"
+      )"
+
+check "left at / is a no-op" \
+      $'0\t/' \
+      "$(
+        n="$tmp/pickup4-n"; : > "$n"
+        fzf() {
+            cat > /dev/null; print x >> "$n"
+            if (( $(wc -l < "$n") == 1 )); then printf '%s\n' '' 'left' $'/\t/'
+            else printf '%s\n' '' '' $'/\t/'; fi
+        }
+        out="$(printf '/\t/\n' | _hop_pick '' '' '' '' 0 0 /)"; rc=$?
+        printf '%s\t%s' "$rc" "$out"
+      )"
+
 # --- hop orchestration (non-interactive paths) ----------------------------
 print ""
 print "hop"

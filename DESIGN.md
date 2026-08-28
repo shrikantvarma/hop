@@ -116,9 +116,13 @@ toggles while descended re-star in place, preserving cursor, level, and the
 typed query — kicking the user back to the top after each star would make
 bulk curation miserable. `Ctrl-T`/`Ctrl-D` survive as hidden aliases.
 
-Descent pushes the previous list and prompt onto parallel stacks, so backing out
-restores exactly what was on screen. Descending into a directory with no
-subdirectories is a no-op rather than an error. `cd` happens only on `Enter`, so
+Descent pushes the previous list, prompt, and base directory onto parallel
+stacks, so backing out restores exactly what was on screen. When there is
+nothing left to pop, `←` keeps climbing the real tree instead of stopping:
+it lists the parent of the current base (or, in the mixed search results,
+of the highlighted item), with the folder you came from lifted to the top
+so the cursor lands on it. It stops at `/`. Descending into a directory with
+no subdirectories is a no-op rather than an error. `cd` happens only on `Enter`, so
 browsing never moves the shell.
 
 ## The trailing slash
@@ -146,7 +150,7 @@ user edits `.hoprc` and then wonders why the entry never appears.
 
 ## Testing
 
-`zsh test_hop.zsh` — 126 assertions over the pure units, including descent
+`zsh test_hop.zsh` — 131 assertions over the pure units, including descent
 through a symlinked parent, per-bookmark index depth, favorite round-trips that
 must restore the config byte-for-byte, paths containing spaces, paths
 containing literal `~` characters, and every `--expect` key.

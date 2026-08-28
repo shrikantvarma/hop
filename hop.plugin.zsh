@@ -450,7 +450,8 @@ _hop_pick() {
     local lines out q key sel kids prompt="${2:-hop > }"
     local header="${3:-Enter hop   → descend   ← up}" extra_key="${4:-}"
     local with_settings="${5:-0}" with_toggle="${6:-0}"
-    local -a stack_lines stack_prompt expect
+    local base="${7:-}" from parent
+    local -a stack_lines stack_prompt stack_base expect
 
     if ! command -v fzf >/dev/null 2>&1; then
         print -u2 "hop: fzf is not installed -- see https://github.com/junegunn/fzf"
@@ -503,19 +504,37 @@ _hop_pick() {
                 if [[ -n "$kids" ]]; then
                     stack_lines+=("$lines")
                     stack_prompt+=("$prompt")
+                    stack_base+=("$base")
                     lines="$kids"
                     prompt="${sel:t}/ > "
+                    base="$sel"
                 fi
                 ;;
             left)
                 if (( ${#stack_lines} )); then
                     lines="${stack_lines[-1]}"
                     prompt="${stack_prompt[-1]}"
+                    base="${stack_base[-1]}"
                     shift -p stack_lines
                     shift -p stack_prompt
+                    shift -p stack_base
                     # Stars may have been toggled while a level deeper.
                     (( with_toggle || with_settings )) \
                         && lines="$(print -r -- "$lines" | _hop_restar)"
+                else
+                    # Nothing to pop: walk up the real tree instead. A screen
+                    # with no base (the mixed search results) climbs from the
+                    # highlighted item, so ← there shows its siblings.
+                    from="${base:-$sel}"
+                    [[ "$from" != / ]] && from="${from%/}"   # hop -b dir/
+                    [[ -n "$from" && "$from" != / ]] || continue
+                    parent="${from:h}"
+                    kids="$(_hop_children "$parent" | _hop_mark_favs \
+                            | _hop_lift "$from")"
+                    [[ -n "$kids" ]] || continue
+                    lines="$kids"
+                    base="$parent"
+                    prompt="${parent:t}/ > "   # ${/:t} is empty → "/ > "
                 fi
                 ;;
             '?'|ctrl-t)
@@ -546,6 +565,20 @@ _hop_pick() {
                 ;;
         esac
     done
+}
+
+# ---------------------------------------------------------------------------
+# _hop_lift — move the line whose path is $1 to the top of the list
+#
+# fzf keeps input order, so this is how ← lands the cursor on the folder you
+# just came from, the way a file manager does after `cd ..`.
+# ---------------------------------------------------------------------------
+_hop_lift() {
+    emulate -L zsh
+    awk -F'\t' -v f="$1" '
+        $1 == f { print; next }
+        { rest = rest $0 "\n" }
+        END { printf "%s", rest }'
 }
 
 # ---------------------------------------------------------------------------
@@ -597,7 +630,7 @@ _hop_browse() {
         return 1
     fi
     sel="$(print -r -- "$kids" | _hop_pick '' "${base:t}/ > " \
-        'Enter hop   → descend   ← up   Space ★' '' 0 1)" || return $?
+        'Enter hop   → descend   ← up   Space ★' '' 0 1 "$base")" || return $?
     print -r -- "$sel"
 }
 
@@ -720,7 +753,7 @@ _hop_manage_favorites() {
         return 1
     fi
     print -r -- "$kids" | _hop_pick '' "settings > " \
-        'Space star/unstar   → descend   ← up   Enter/Esc done' '' 0 1 >/dev/null
+        'Space star/unstar   → descend   ← up   Enter/Esc done' '' 0 1 "$base" >/dev/null
     return 0
 }
 
