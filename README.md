@@ -25,6 +25,17 @@ echo 'source ~/.hop/hop.plugin.zsh' >> ~/.zshrc
 source ~/.zshrc
 ```
 
+### Using hop from bash
+
+hop is a zsh plugin, but you can call it from bash. zsh and fzf still need to be installed.
+
+```sh
+git clone https://github.com/shrikantvarma/hop.git ~/.hop
+echo 'source ~/.hop/hop.plugin.bash' >> ~/.bashrc
+```
+
+The bash `hop` runs the zsh plugin in a child zsh and then moves your shell to the folder you picked. Everything works the same, with two differences: there is no tab completion of aliases, and each call takes about 50–100 ms longer to start.
+
 ## Your first minute
 
 Run `hop`.
